@@ -1,0 +1,102 @@
+{
+ "actions": [],
+ "creation": "2026-09-16 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "schedule_section",
+  "backup_schedule",
+  "retention_section",
+  "local_backup_limit",
+  "retention_column",
+  "remote_keep_days",
+  "notification_section",
+  "notification_recipients",
+  "notification_column",
+  "email_on_success"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "description": "Manual backups remain available when the schedule is disabled.",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enable Scheduled Backups"
+  },
+  {
+   "fieldname": "schedule_section",
+   "fieldtype": "Section Break",
+   "label": "Schedule"
+  },
+  {
+   "fieldname": "backup_schedule",
+   "fieldtype": "Table",
+   "label": "Schedule",
+   "options": "Restic Backup Schedule Entry",
+   "reqd": 1
+  },
+  {
+   "fieldname": "retention_section",
+   "fieldtype": "Section Break",
+   "label": "Retention"
+  },
+  {
+   "default": "4",
+   "description": "Complete default-path backup sets retained locally after successful off-site upload.",
+   "fieldname": "local_backup_limit",
+   "fieldtype": "Int",
+   "label": "Local Backup Sets",
+   "reqd": 1
+  },
+  {
+   "fieldname": "retention_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "14",
+   "description": "Restic keeps snapshots within this window and always keeps the newest snapshot.",
+   "fieldname": "remote_keep_days",
+   "fieldtype": "Int",
+   "label": "Remote Retention (Days)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "notification_section",
+   "fieldtype": "Section Break",
+   "label": "Notifications"
+  },
+  {
+   "description": "Comma-separated email addresses. Failures are always sent; successes are optional.",
+   "fieldname": "notification_recipients",
+   "fieldtype": "Data",
+   "label": "Notification Recipients"
+  },
+  {
+   "fieldname": "notification_column",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "email_on_success",
+   "fieldtype": "Check",
+   "label": "Email on Success"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-09-16 15:50:00.000000",
+ "modified_by": "Administrator",
+ "module": "Restic Backup",
+ "name": "Restic Backup Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "states": [],
+ "track_changes": 1
+}

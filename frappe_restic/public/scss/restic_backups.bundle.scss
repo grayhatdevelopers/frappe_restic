@@ -1,0 +1,129 @@
+.restic-backup-settings-dialog {
+  .modal-dialog {
+    max-width: 880px;
+  }
+
+  .restic-backup-schedule-editor {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .restic-backup-schedule-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 8rem auto;
+    align-items: end;
+    gap: 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    background: var(--fg-color);
+  }
+
+  .restic-backup-field-label {
+    display: block;
+    margin-bottom: 0.4rem;
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+
+  .restic-backup-day-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .restic-backup-day {
+    min-width: 2.9rem;
+    border-color: var(--gray-300);
+    background: var(--control-bg);
+    color: var(--text-color);
+
+    &.is-selected {
+      border-color: var(--primary-color);
+      background: var(--primary-color);
+      color: var(--fg-color);
+    }
+  }
+
+  .restic-backup-schedule-time {
+    margin: 0;
+  }
+
+  .restic-backup-remove {
+    min-height: var(--input-height);
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .restic-backup-add {
+    justify-self: start;
+  }
+
+  .restic-backup-empty {
+    padding: 0.75rem 1rem;
+    border: 1px dashed var(--border-color);
+    border-radius: var(--border-radius-md);
+  }
+
+  .restic-backup-offsite {
+    min-width: 0;
+
+    p,
+    code,
+    span {
+      overflow-wrap: anywhere;
+    }
+
+    &[open] .restic-backup-offsite-summary::before {
+      transform: rotate(90deg);
+    }
+  }
+
+  .restic-backup-offsite-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+    cursor: pointer;
+    list-style: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    &::before {
+      content: "›";
+      color: var(--text-muted);
+      font-size: 1.4rem;
+      line-height: 1;
+      transition: transform 120ms ease;
+    }
+
+    .indicator-pill {
+      margin-left: auto;
+    }
+  }
+
+  .restic-backup-env-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+    min-width: 0;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  @media (max-width: 767px) {
+    .restic-backup-schedule-row {
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+
+    .restic-backup-remove {
+      justify-self: start;
+      min-height: auto;
+    }
+  }
+}

@@ -1,0 +1,19 @@
+[project]
+name = "frappe-restic"
+version = "0.1.0"
+description = "Scheduled backups, encrypted Restic snapshots and stopped-service recovery for Frappe"
+requires-python = ">=3.10"
+authors = [{name = "Grayhat Developers"}]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["frappe_restic*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.js", "*.txt", "*.sh", "*.scss"]
+
+[tool.bench.frappe-dependencies]
+frappe = ">=15.40.4,<16.0.0"

@@ -1,0 +1,3 @@
+recursive-include frappe_restic *.json *.js *.txt *.sh *.scss
+recursive-include deployment *
+include README.md

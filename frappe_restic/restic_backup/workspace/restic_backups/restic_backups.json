@@ -1,0 +1,26 @@
+{
+ "doctype": "Workspace",
+ "name": "Restic Backups",
+ "label": "Restic Backups",
+ "title": "Restic Backups",
+ "module": "Restic Backup",
+ "public": 1,
+ "is_hidden": 0,
+ "icon": "database",
+ "sequence_id": 99,
+ "roles": [
+  {
+   "role": "System Manager"
+  }
+ ],
+ "shortcuts": [
+  {
+   "label": "Backup Control",
+   "type": "Page",
+   "link_to": "restic-backup-control",
+   "color": "Grey"
+  }
+ ],
+ "content": "[{\"id\": \"backup-shortcut\", \"type\": \"shortcut\", \"data\": {\"shortcut_name\": \"Backup Control\", \"col\": 3}}]",
+ "modified": "2026-09-23 13:48:25.000000"
+}

@@ -1,0 +1,11 @@
+{
+ "doctype": "Page",
+ "modified": "2026-09-16 14:14:15.000000",
+ "module": "Restic Backup",
+ "name": "restic-backup-control",
+ "page_name": "restic-backup-control",
+ "title": "Backup Control",
+ "roles": [
+  {"role": "System Manager"}
+ ]
+}
