@@ -403,7 +403,7 @@ class ResticBackupControl {
 				<p>${__("Set these Environment Variables:")}</p><pre>${frappe.utils.escape_html(values)}</pre>
 				<p>${__("Use RESTIC_RESTORE_SNAPSHOT=latest instead to restore the newest backup for this site.")}</p>
 				<p>${__("Stop the application before deploying. After success, remove the restore values and set SITE_OPERATION=migrate for ordinary deployments.")}</p>
-				<p>${__("For a plain VPS, run scripts/recover-site.sh from the code you want to deploy with this snapshot and site. Recovery uses the repository credentials already configured on the server.")}</p>`,
+				<p>${__("For other deployments, stop runtime services and use the recovery entrypoint shipped with the Restic Backups app, following its installation guide. Recovery uses the selected application version and the repository credentials configured on the server.")}</p>`,
 		});
 	}
 
