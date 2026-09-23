@@ -6,6 +6,7 @@ frappe.pages["restic-backup-control"].on_page_load = function (wrapper) {
 		single_column: true,
 	});
 	page.add_inner_button(__("Native Backups"), () => frappe.set_route("backups"));
+	page.add_inner_button(__("Backup Runs"), () => frappe.set_route("List", "Restic Backup Run"));
 	const backupControl = new ResticBackupControl(page, wrapper);
 	page.add_inner_button(__("Settings"), () => backupControl.openSettings());
 };
