@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - frappe_image: frappe/erpnext:v15.121.3
+            db_image: mariadb:10.6
+          - frappe_image: frappe/erpnext:v16.36.0
+            db_image: mariadb:11.8
+    name: ${{ matrix.frappe_image }}
+    steps:
+      - uses: actions/checkout@v4
+      # bench build writes into the app's public/dist as the image's frappe user (uid 1000).
+      - run: sudo chown -R 1000:1000 .
+      - name: Tests in a disposable bench
+        env:
+          FRAPPE_IMAGE: ${{ matrix.frappe_image }}
+          DB_IMAGE: ${{ matrix.db_image }}
+        run: tests/docker/run.sh
