@@ -1,5 +1,5 @@
 [project]
-name = "frappe-restic"
+name = "frappe_restic"
 dynamic = ["version"]
 description = "Encrypted off-site Restic backups, schedules, alerts and safe container deploys and restores for Frappe"
 license = {file = "LICENSE"}
