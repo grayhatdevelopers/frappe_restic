@@ -6,14 +6,11 @@ requires-python = ">=3.10"
 authors = [{name = "Grayhat Developers"}]
 
 [build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
 
-[tool.setuptools.packages.find]
-include = ["frappe_restic*"]
-
-[tool.setuptools.package-data]
-"*" = ["*.json", "*.js", "*.txt", "*.sh", "*.scss"]
+[tool.flit.module]
+name = "frappe_restic"
 
 [tool.bench.frappe-dependencies]
 frappe = ">=15.40.4,<17.0.0"

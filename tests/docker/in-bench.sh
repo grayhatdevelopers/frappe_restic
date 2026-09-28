@@ -17,7 +17,7 @@ bench set-config -g redis_queue redis://redis-queue:6379
 bench set-config -g redis_socketio redis://redis-queue:6379
 
 echo "== Install app into the bench"
-pip install --quiet --no-build-isolation -e apps/frappe_restic
+pip install --quiet -e apps/frappe_restic
 if ! grep -qx frappe_restic sites/apps.txt; then
     [[ -z "$(tail -c 1 sites/apps.txt)" ]] || echo >> sites/apps.txt
     echo frappe_restic >> sites/apps.txt
