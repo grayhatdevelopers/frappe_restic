@@ -323,7 +323,8 @@ def _create_full_native_backup() -> dict[str, str]:
 		)
 	generator = BackupGenerator(
 		frappe.conf.db_name,
-		frappe.conf.db_name,
+		# v16 may use a separate database user; v15 always uses the database name.
+		frappe.conf.db_user or frappe.conf.db_name,
 		frappe.conf.db_password,
 		db_socket=frappe.conf.db_socket,
 		db_host=frappe.conf.db_host,

@@ -82,7 +82,7 @@ class TestRecovery(unittest.TestCase):
 			stage = Path(command[command.index("--target") + 1]) / "snapshot"
 			stage.mkdir()
 			(stage / "database.sql").write_text("SELECT 1;")
-			recovery.write_json(stage / "site_config.json", {"encryption_key": "original-key", "db_host": "old-host", "db_password": "old-password"})
+			recovery.write_json(stage / "site_config.json", {"encryption_key": "original-key", "db_host": "old-host", "db_user": "old-user", "db_password": "old-password"})
 			for kind in ("public", "private"):
 				files = stage / kind / "erp.test" / kind / "files"
 				files.mkdir(parents=True)
@@ -120,6 +120,8 @@ class TestRecovery(unittest.TestCase):
 		# Connection comes from common_site_config, never from the backup or a hard-coded host.
 		self.assertNotIn("db_host", config)
 		self.assertNotIn("db_port", config)
+		# v16 separates the database user; the backup's user does not exist on this server.
+		self.assertNotIn("db_user", config)
 		self.assertEqual(config["maintenance_mode"], 0)
 		for kind in ("public", "private"):
 			self.assertFalse((self.site / kind / "files" / "newer.txt").exists())

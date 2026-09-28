@@ -270,10 +270,10 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 			try:
 				config = read_json(content / "site_config.json")
 				# Keep keys/settings from the backup, but never its old server/database connection.
-				for key in ("db_name", "db_password", "db_host", "db_port", "db_socket", "redis_cache", "redis_queue", "redis_socketio", "host_name"):
+				for key in ("db_name", "db_user", "db_password", "db_host", "db_port", "db_socket", "redis_cache", "redis_queue", "redis_socketio", "host_name"):
 					config.pop(key, None)
 				# A site-specific connection survives; otherwise common_site_config supplies it.
-				for key in ("db_name", "db_password", "db_host", "db_port", "db_socket", "host_name"):
+				for key in ("db_name", "db_user", "db_password", "db_host", "db_port", "db_socket", "host_name"):
 					if key in current:
 						config[key] = current[key]
 				if not config.get("db_name"):
