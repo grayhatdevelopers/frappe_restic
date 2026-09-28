@@ -1,20 +1,20 @@
-# Restic Backups for Frappe v15
+# Restic Backups for Frappe
 
 An independent Frappe app for scheduled native backups, encrypted off-site Restic
 snapshots, backup history, retention and stopped-service recovery. ERPNext is not
-required. Frappe v16 is not supported by this release. Automated recovery currently
-targets Linux, MariaDB and a Docker Compose bench with a `db` service.
+required. Supports Frappe v15 and v16. Automated recovery currently targets Linux,
+MariaDB and a containerised bench; the database connection comes from
+`common_site_config.json` (or the site's own `db_host`/`db_port`).
 
 ## Install
 
-This directory is the complete app source and can be published as its own repository.
 Install it as `apps/frappe_restic`, install its Python package into the bench virtualenv,
 and add `frappe_restic` to `sites/apps.txt`. For a normal Bench distribution, use
 `bench get-app <your-app-repository>` and `bench --site <site> install-app frappe_restic`.
 Build assets with `bench build --app frappe_restic`, then migrate using your deployment
 pipeline. Do not install or migrate a live production site without its safety backup.
 
-The image needs `restic`, `flock` (util-linux), Bash, and the normal Frappe v15
+The image needs `restic`, `flock` (util-linux), Bash, and the normal Frappe
 dependencies. It must contain this app before installing it in an existing database.
 Include the JSON, JS, SCSS, text and shell resources when distributing the source.
 
@@ -96,8 +96,14 @@ use `RESTIC_CONFIGURE_EXECUTABLE` when the platform also needs assets/config ref
 
 ## Validation
 
-Run the app's tests in a Frappe v15 Docker bench, including permission, schedule,
-archive-validation, deployment and restore tests. The transport/recovery unit tests
-also run via `python -m unittest frappe_restic.restic_backup.test_restic_transport frappe_restic.restic_backup.test_recovery frappe_restic.restic_backup.test_deployment`.
+Run the full suite in a disposable Docker bench (removed afterwards):
+
+```bash
+FRAPPE_IMAGE=frappe/erpnext:v15.121.3 tests/docker/run.sh
+FRAPPE_IMAGE=frappe/erpnext:v16.36.0 DB_IMAGE=mariadb:11.8 tests/docker/run.sh
+```
+
+It covers permission, schedule, archive-validation, deployment and restore tests,
+plus the site-less unit tests in `tests/docker/in-bench.sh`.
 Set `RESTIC_NAMESPACE=frappe` for isolated tests. Real off-site restore drills should
 use a disposable repository, site and database, separate from production.
