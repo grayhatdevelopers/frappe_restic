@@ -37,7 +37,8 @@ echo "== Unit tests (no site required)"
 python -m unittest \
     frappe_restic.restic_backup.test_restic_transport \
     frappe_restic.restic_backup.test_recovery \
-    frappe_restic.restic_backup.test_deployment
+    frappe_restic.restic_backup.test_deployment \
+    frappe_restic.test_install
 
 echo "== Frappe tests"
 bench --site "${SITE_NAME}" run-tests --app frappe_restic

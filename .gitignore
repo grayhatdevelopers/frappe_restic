@@ -4,3 +4,4 @@ __pycache__/
 .env.test
 .local/
 node_modules/
+frappe_restic/public/dist/
