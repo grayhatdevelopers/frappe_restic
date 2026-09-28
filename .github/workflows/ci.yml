@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # bench build writes into the app's public/dist as the image's frappe user (uid 1000).
-      - run: sudo chown -R 1000:1000 .
+      - run: chmod -R a+w frappe_restic/public
       - name: Tests in a disposable bench
         env:
           FRAPPE_IMAGE: ${{ matrix.frappe_image }}

@@ -2,7 +2,7 @@
 
 Everything runs in disposable Docker containers; the host needs only Docker and Bash.
 The checkout is mounted into the bench and `bench build` writes into it as the image's
-`frappe` user (uid 1000), so on Linux the checkout must be writable by uid 1000.
+`frappe` user (uid 1000), so on Linux `frappe_restic/public` must be writable by uid 1000.
 
 ## Test suite
 
