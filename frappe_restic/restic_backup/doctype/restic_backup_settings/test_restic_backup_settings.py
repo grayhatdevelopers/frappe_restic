@@ -5,8 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import frappe
-from frappe.tests.utils import FrappeTestCase
 from frappe.model.document import Document
+from frappe.tests.utils import FrappeTestCase
 
 from frappe_restic.restic_backup.backup_control import (
 	_require_system_manager,
@@ -24,15 +24,9 @@ class TestResticBackupSettings(FrappeTestCase):
 	def test_settings_use_compact_schedule_editor_instead_of_frappe_grid(self) -> None:
 		app_path = Path(frappe.get_app_path("frappe_restic"))
 		page_script = (
-			app_path
-			/ "restic_backup"
-			/ "page"
-			/ "restic_backup_control"
-			/ "restic_backup_control.js"
+			app_path / "restic_backup" / "page" / "restic_backup_control" / "restic_backup_control.js"
 		).read_text(encoding="utf-8")
-		stylesheet = (
-			app_path / "public" / "scss" / "restic_backups.bundle.scss"
-		).read_text(encoding="utf-8")
+		stylesheet = (app_path / "public" / "scss" / "restic_backups.bundle.scss").read_text(encoding="utf-8")
 
 		self.assertNotIn('fieldtype: "Table"', page_script)
 		self.assertNotIn('fieldtype: "MultiSelectPills"', page_script)
@@ -48,9 +42,11 @@ class TestResticBackupSettings(FrappeTestCase):
 	def test_defaults_expand_to_independent_schedule_rows(self) -> None:
 		settings = frappe.get_doc({"doctype": "Restic Backup Settings"})
 		load = Document.load_from_db
+
 		def load_other_documents(document):
 			if document is not settings:
 				return load(document)
+
 		with patch.object(Document, "load_from_db", new=load_other_documents):
 			settings.load_from_db()
 
@@ -64,14 +60,10 @@ class TestResticBackupSettings(FrappeTestCase):
 
 	def test_backup_control_is_system_manager_only(self) -> None:
 		settings_roles = {
-			permission.role
-			for permission in frappe.get_meta("Restic Backup Settings").permissions
+			permission.role for permission in frappe.get_meta("Restic Backup Settings").permissions
 		}
 		run_roles = {permission.role for permission in frappe.get_meta("Restic Backup Run").permissions}
-		page_roles = {
-			row.role
-			for row in frappe.get_doc("Page", "restic-backup-control").roles
-		}
+		page_roles = {row.role for row in frappe.get_doc("Page", "restic-backup-control").roles}
 
 		self.assertEqual({"System Manager"}, settings_roles)
 		self.assertEqual({"System Manager"}, run_roles)
@@ -162,9 +154,7 @@ class TestResticBackupSettings(FrappeTestCase):
 				"frappe_restic.restic_backup.backup_control.now_datetime",
 				return_value=datetime(2026, 9, 20, 2, 5),
 			),
-			patch(
-				"frappe_restic.restic_backup.backup_control._enqueue_backup"
-			) as enqueue_backup,
+			patch("frappe_restic.restic_backup.backup_control._enqueue_backup") as enqueue_backup,
 		):
 			schedule_due_backups()
 

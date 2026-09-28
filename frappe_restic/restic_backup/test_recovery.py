@@ -9,9 +9,9 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-from types import SimpleNamespace
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from frappe_restic.restic_backup import recovery
@@ -19,7 +19,11 @@ from frappe_restic.restic_backup import recovery
 
 class TestRestoredEncryption(unittest.TestCase):
 	def test_missing_key_is_allowed_only_without_encrypted_secrets(self) -> None:
-		for rows, config, rejected in (([], {}, False), ([(1,)], {}, True), ([(1,)], {"encryption_key": "original"}, False)):
+		for rows, config, rejected in (
+			([], {}, False),
+			([(1,)], {}, True),
+			([(1,)], {"encryption_key": "original"}, False),
+		):
 			with self.subTest(rows=rows, config=config):
 				frappe = SimpleNamespace(conf=config, db=SimpleNamespace(sql=Mock(return_value=rows)))
 				with patch.dict(sys.modules, {"frappe": frappe}):
@@ -29,7 +33,9 @@ class TestRestoredEncryption(unittest.TestCase):
 					else:
 						recovery.validate_restored_encryption()
 				if not config:
-					frappe.db.sql.assert_called_once_with("SELECT 1 FROM `__Auth` WHERE encrypted = 1 LIMIT 1")
+					frappe.db.sql.assert_called_once_with(
+						"SELECT 1 FROM `__Auth` WHERE encrypted = 1 LIMIT 1"
+					)
 
 
 class TestRecoveryIdentity(unittest.TestCase):
@@ -49,7 +55,9 @@ class TestRecovery(unittest.TestCase):
 		self.root = Path(self.temporary.name)
 		self.site = self.root / "sites" / "erp.test"
 		self.site.mkdir(parents=True)
-		recovery.write_json(self.site / "site_config.json", {"db_name": "current_db", "db_password": "current-password"})
+		recovery.write_json(
+			self.site / "site_config.json", {"db_name": "current_db", "db_password": "current-password"}
+		)
 		for kind in ("public", "private"):
 			(self.site / kind / "files").mkdir(parents=True)
 			(self.site / kind / "files" / "newer.txt").write_text("must disappear")
@@ -59,11 +67,15 @@ class TestRecovery(unittest.TestCase):
 		self.rollback_failure = False
 		self.manifest_commit = self.commit
 		self.manifest_site = "erp.test"
-		self.environment = patch.dict(os.environ, {
-			"SITE_NAME": "erp.test", "RESTIC_RESTORE_SNAPSHOT": "b" * 64,
-			"DB_ROOT_PASSWORD": "unused-test-password",
-			"RESTIC_CONFIGURE_EXECUTABLE": "/usr/local/bin/configure-bench",
-		})
+		self.environment = patch.dict(
+			os.environ,
+			{
+				"SITE_NAME": "erp.test",
+				"RESTIC_RESTORE_SNAPSHOT": "b" * 64,
+				"DB_ROOT_PASSWORD": "unused-test-password",
+				"RESTIC_CONFIGURE_EXECUTABLE": "/usr/local/bin/configure-bench",
+			},
+		)
 		self.attempt = patch.object(recovery, "recovery_attempt", return_value="restore-test-001")
 		self.attempt.start()
 		self.addCleanup(self.attempt.stop)
@@ -82,7 +94,15 @@ class TestRecovery(unittest.TestCase):
 			stage = Path(command[command.index("--target") + 1]) / "snapshot"
 			stage.mkdir()
 			(stage / "database.sql").write_text("SELECT 1;")
-			recovery.write_json(stage / "site_config.json", {"encryption_key": "original-key", "db_host": "old-host", "db_user": "old-user", "db_password": "old-password"})
+			recovery.write_json(
+				stage / "site_config.json",
+				{
+					"encryption_key": "original-key",
+					"db_host": "old-host",
+					"db_user": "old-user",
+					"db_password": "old-password",
+				},
+			)
 			for kind in ("public", "private"):
 				files = stage / kind / "erp.test" / kind / "files"
 				files.mkdir(parents=True)
@@ -92,7 +112,11 @@ class TestRecovery(unittest.TestCase):
 			self.write_native_backup(Path(command[command.index("--backup-path") + 1]))
 		if self.failure and self.failure in command:
 			raise RuntimeError("simulated operation failure")
-		if self.rollback_failure and "restore-database" in command and ".frappe-restic-rollback-stage" in command[-1]:
+		if (
+			self.rollback_failure
+			and "restore-database" in command
+			and ".frappe-restic-rollback-stage" in command[-1]
+		):
 			raise RuntimeError("simulated rollback failure")
 
 	def write_native_backup(self, directory: Path) -> None:
@@ -137,10 +161,15 @@ class TestRecovery(unittest.TestCase):
 		self.assertFalse((self.root / "sites/.frappe-recovery-blocked").exists())
 
 	def test_site_specific_database_connection_is_preserved(self) -> None:
-		recovery.write_json(self.site / "site_config.json", {
-			"db_name": "current_db", "db_password": "current-password",
-			"db_host": "mariadb.internal", "db_port": 3307,
-		})
+		recovery.write_json(
+			self.site / "site_config.json",
+			{
+				"db_name": "current_db",
+				"db_password": "current-password",
+				"db_host": "mariadb.internal",
+				"db_port": 3307,
+			},
+		)
 		recovery.restore_site(self.root)
 		config = recovery.read_json(self.site / "site_config.json")
 		self.assertEqual(config["db_host"], "mariadb.internal")
@@ -170,9 +199,10 @@ class TestRecovery(unittest.TestCase):
 		self.assertFalse(any("backup" in command for command in self.commands))
 
 	def test_latest_is_pinned_and_completed_restart_does_not_resolve_again(self) -> None:
-		with patch.dict(os.environ, {"RESTIC_RESTORE_SNAPSHOT": "latest"}), patch.object(
-			recovery, "latest_snapshot", return_value="d" * 64
-		) as latest:
+		with (
+			patch.dict(os.environ, {"RESTIC_RESTORE_SNAPSHOT": "latest"}),
+			patch.object(recovery, "latest_snapshot", return_value="d" * 64) as latest,
+		):
 			recovery.restore_site(self.root)
 			receipt = recovery.read_json(self.root / "sites/.frappe-recovery/erp.test/restore-test-001.json")
 			self.assertEqual(receipt["snapshot"], "d" * 64)
@@ -183,9 +213,11 @@ class TestRecovery(unittest.TestCase):
 			self.assertEqual(self.commands, [])
 
 	def test_latest_resolution_failure_does_not_touch_site(self) -> None:
-		with patch.dict(os.environ, {"RESTIC_RESTORE_SNAPSHOT": "latest"}), patch.object(
-			recovery, "latest_snapshot", side_effect=ValueError("No backups")
-		), self.assertRaisesRegex(ValueError, "No backups"):
+		with (
+			patch.dict(os.environ, {"RESTIC_RESTORE_SNAPSHOT": "latest"}),
+			patch.object(recovery, "latest_snapshot", side_effect=ValueError("No backups")),
+			self.assertRaisesRegex(ValueError, "No backups"),
+		):
 			recovery.restore_site(self.root)
 		self.assertEqual(self.commands, [])
 		self.assertTrue((self.site / "public/files/newer.txt").exists())
@@ -196,12 +228,16 @@ class TestRecovery(unittest.TestCase):
 			{"id": "b" * 64, "time": "2026-09-17T12:00:00Z", "tags": ["frappe-site:erp.test"]},
 			{"id": "c" * 64, "time": "2026-09-18T12:00:00Z", "tags": ["frappe-site:another"]},
 		]
-		with patch.object(recovery.subprocess, "run", return_value=subprocess.CompletedProcess(
-			[], 0, stdout=json.dumps(entries)
-		)) as listing:
+		with patch.object(
+			recovery.subprocess,
+			"run",
+			return_value=subprocess.CompletedProcess([], 0, stdout=json.dumps(entries)),
+		) as listing:
 			self.assertEqual(recovery.latest_snapshot("erp.test"), "b" * 64)
 			self.assertEqual(listing.call_args.args[0][-2:], ["--tag", "frappe-site:erp.test"])
-		with patch.object(recovery.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout="[]")):
+		with patch.object(
+			recovery.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout="[]")
+		):
 			with self.assertRaisesRegex(ValueError, "No backups"):
 				recovery.latest_snapshot("erp.test")
 
@@ -239,7 +275,10 @@ class TestRecovery(unittest.TestCase):
 		with self.assertRaises(RuntimeError):
 			recovery.restore_site(self.root)
 		self.assertFalse((self.root / "sites/.frappe-recovery-blocked").exists())
-		self.assertEqual(recovery.read_json(self.site / "site_config.json"), {"db_name": "current_db", "db_password": "current-password"})
+		self.assertEqual(
+			recovery.read_json(self.site / "site_config.json"),
+			{"db_name": "current_db", "db_password": "current-password"},
+		)
 		self.assertTrue((self.site / "public/files/newer.txt").exists())
 		self.assertEqual(self.database_restores(), [])
 		self.assertEqual(self.receipt()["status"], "Failed")
@@ -317,9 +356,17 @@ class TestRecovery(unittest.TestCase):
 		input_root.mkdir()
 		self.run_command(["restic", "--target", str(input_root)])
 		stage = input_root / "snapshot"
-		environment = {**os.environ, "RESTIC_REPOSITORY": str(self.root / "repository"), "RESTIC_PASSWORD": "isolated-test-only"}
+		environment = {
+			**os.environ,
+			"RESTIC_REPOSITORY": str(self.root / "repository"),
+			"RESTIC_PASSWORD": "isolated-test-only",
+		}
+
 		def restic(*args, cwd=None):
-			return subprocess.run(["restic", *args], env=environment, cwd=cwd, check=True, capture_output=True, text=True)
+			return subprocess.run(
+				["restic", *args], env=environment, cwd=cwd, check=True, capture_output=True, text=True
+			)
+
 		restic("init")
 		result = restic("backup", ".", "--json", cwd=stage)
 		snapshot = json.loads(result.stdout.splitlines()[-1])["snapshot_id"]

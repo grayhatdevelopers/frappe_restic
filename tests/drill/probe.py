@@ -2,6 +2,7 @@
 
 Run inside the drill image: env/bin/python /drill/probe.py {seed,add,damage,fingerprint}
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -17,7 +18,9 @@ SECRET = ("ToDo", "drill-secret", "drill_secret")
 
 def add(count: int) -> None:
 	for index in range(count):
-		frappe.get_doc({"doctype": "ToDo", "description": f"drill record {os.urandom(4).hex()} {index}"}).insert()
+		frappe.get_doc(
+			{"doctype": "ToDo", "description": f"drill record {os.urandom(4).hex()} {index}"}
+		).insert()
 
 
 def seed() -> None:
@@ -28,12 +31,14 @@ def seed() -> None:
 	doctype, name, fieldname = SECRET
 	set_encrypted_password(doctype, name, os.urandom(16).hex(), fieldname)
 	for private in (0, 1):
-		frappe.get_doc({
-			"doctype": "File",
-			"file_name": f"drill-{'private' if private else 'public'}.txt",
-			"is_private": private,
-			"content": os.urandom(4096).hex(),
-		}).insert()
+		frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": f"drill-{'private' if private else 'public'}.txt",
+				"is_private": private,
+				"content": os.urandom(4096).hex(),
+			}
+		).insert()
 
 
 def damage() -> None:
@@ -50,12 +55,16 @@ def fingerprint() -> dict:
 	for name in frappe.get_all("File", filters={"file_name": ["like", "drill-%"]}, pluck="name"):
 		document = frappe.get_doc("File", name)
 		content = document.get_content()
-		files[document.file_name] = hashlib.sha256(content.encode() if isinstance(content, str) else content).hexdigest()
+		files[document.file_name] = hashlib.sha256(
+			content.encode() if isinstance(content, str) else content
+		).hexdigest()
 	secret = get_decrypted_password(*SECRET, raise_exception=False) or ""
 	return {
 		"todos": frappe.db.count("ToDo", {"description": ["like", "drill record %"]}),
 		"files": dict(sorted(files.items())),
-		"encryption_key_sha256": hashlib.sha256((frappe.conf.get("encryption_key") or "").encode()).hexdigest(),
+		"encryption_key_sha256": hashlib.sha256(
+			(frappe.conf.get("encryption_key") or "").encode()
+		).hexdigest(),
 		"secret_sha256": hashlib.sha256(secret.encode()).hexdigest(),
 	}
 

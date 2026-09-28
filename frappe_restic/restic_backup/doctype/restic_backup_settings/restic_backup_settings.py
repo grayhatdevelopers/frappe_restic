@@ -28,10 +28,13 @@ class ResticBackupSettings(Document):
 		super().load_from_db()
 		if not self.backup_schedule:
 			for backup_time in ("13:00:00", "20:00:00"):
-				self.append("backup_schedule", {
-					"days": "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday",
-					"backup_time": backup_time,
-				})
+				self.append(
+					"backup_schedule",
+					{
+						"days": "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday",
+						"backup_time": backup_time,
+					},
+				)
 		return self
 
 	def validate(self) -> None:

@@ -14,6 +14,8 @@ from unittest.mock import patch
 
 from frappe_restic.restic_backup.restic_transport import (
 	BackupTransportError,
+	_repository_is_missing,
+	_restic_error,
 	backup_with_restic,
 	deployment_backup,
 	discover_backup_set,
@@ -24,41 +26,75 @@ from frappe_restic.restic_backup.restic_transport import (
 	stage_backup_set,
 	validate_backup_set,
 	write_local_deployment_manifest,
-	_repository_is_missing,
-	_restic_error,
 )
 
 
 class TestResticTransport(unittest.TestCase):
 	def test_only_missing_config_allows_initialization(self) -> None:
 		for detail in ("The specified key does not exist.", "NoSuchKey", "no such file or directory"):
-			self.assertTrue(_repository_is_missing(CompletedProcess([], 1, "", f"Fatal: unable to open config file: {detail}")))
-		for detail in ("Access Denied", "The specified bucket does not exist", "connection refused", "certificate verify failed"):
-			self.assertFalse(_repository_is_missing(CompletedProcess([], 1, "", f"Fatal: unable to open config file: {detail}")))
-		self.assertFalse(_repository_is_missing(CompletedProcess([], 1, "", "wrong password or no key found")))
+			self.assertTrue(
+				_repository_is_missing(
+					CompletedProcess([], 1, "", f"Fatal: unable to open config file: {detail}")
+				)
+			)
+		for detail in (
+			"Access Denied",
+			"The specified bucket does not exist",
+			"connection refused",
+			"certificate verify failed",
+		):
+			self.assertFalse(
+				_repository_is_missing(
+					CompletedProcess([], 1, "", f"Fatal: unable to open config file: {detail}")
+				)
+			)
+		self.assertFalse(
+			_repository_is_missing(CompletedProcess([], 1, "", "wrong password or no key found"))
+		)
 
 	def test_error_keeps_cause_before_repository_url_and_redacts_secrets(self) -> None:
 		with patch.dict("os.environ", {"RESTIC_PASSWORD": "test-private-password"}):
-			error = _restic_error("probe", CompletedProcess([], 1, "", "Fatal: Access Denied test-private-password\nIs there a repository?\ns3:https://host/bucket"))
+			error = _restic_error(
+				"probe",
+				CompletedProcess(
+					[],
+					1,
+					"",
+					"Fatal: Access Denied test-private-password\nIs there a repository?\ns3:https://host/bucket",
+				),
+			)
 		self.assertIn("Access Denied", error)
 		self.assertNotIn("test-private-password", error)
 
 	def test_first_upload_initializes_and_handles_a_concurrent_initializer(self) -> None:
-		missing = CompletedProcess([], 1, "", "Fatal: unable to open config file: The specified key does not exist.")
+		missing = CompletedProcess(
+			[], 1, "", "Fatal: unable to open config file: The specified key does not exist."
+		)
 		ready = CompletedProcess([], 0, "[]", "")
 		upload = CompletedProcess([], 0, '{"message_type":"summary","snapshot_id":"abc123"}', "")
-		for initialization in (CompletedProcess([], 0, "created", ""), CompletedProcess([], 1, "", "already initialized")):
-			with patch("frappe_restic.restic_backup.restic_transport._validate_environment"), patch(
-				"frappe_restic.restic_backup.restic_transport._run", side_effect=[missing, initialization, ready, upload]
-			) as run:
+		for initialization in (
+			CompletedProcess([], 0, "created", ""),
+			CompletedProcess([], 1, "", "already initialized"),
+		):
+			with (
+				patch("frappe_restic.restic_backup.restic_transport._validate_environment"),
+				patch(
+					"frappe_restic.restic_backup.restic_transport._run",
+					side_effect=[missing, initialization, ready, upload],
+				) as run,
+			):
 				self.assertEqual(backup_with_restic(".", host="test", tags=[]), "abc123")
 				self.assertEqual(run.call_args_list[1].args[0][-1], "init")
 
 	def test_repository_errors_stop_before_init_or_upload(self) -> None:
 		for detail in ("Fatal: unable to open config file: Access Denied", "wrong password or no key found"):
-			with patch("frappe_restic.restic_backup.restic_transport._validate_environment"), patch(
-				"frappe_restic.restic_backup.restic_transport._run", return_value=CompletedProcess([], 1, "", detail)
-			) as run:
+			with (
+				patch("frappe_restic.restic_backup.restic_transport._validate_environment"),
+				patch(
+					"frappe_restic.restic_backup.restic_transport._run",
+					return_value=CompletedProcess([], 1, "", detail),
+				) as run,
+			):
 				with self.assertRaises(BackupTransportError):
 					backup_with_restic(".", host="test", tags=[])
 				self.assertEqual(run.call_count, 1)

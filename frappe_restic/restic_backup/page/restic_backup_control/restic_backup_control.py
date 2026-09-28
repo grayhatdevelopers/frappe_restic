@@ -23,7 +23,6 @@ from frappe_restic.restic_backup.restic_transport import (
 	restic_is_configured,
 )
 
-
 EDITABLE_SETTING_FIELDS = {
 	"enabled",
 	"backup_schedule",
@@ -45,7 +44,11 @@ def get_recovery_details(run_name: str | None = None, snapshot_id: str | None = 
 		frappe.throw("This run has no usable off-site snapshot ID.")
 	result = _run(["restic", "dump", snapshot, "/recovery.json"], timeout=60)
 	manifest = json.loads(result.stdout)
-	if not isinstance(manifest, dict) or manifest.get("version") != 1 or manifest.get("site") != frappe.local.site:
+	if (
+		not isinstance(manifest, dict)
+		or manifest.get("version") != 1
+		or manifest.get("site") != frappe.local.site
+	):
 		frappe.throw("Snapshot recovery metadata does not match this site.")
 	commit = manifest.get("commit", "")
 	if not isinstance(commit, str):
@@ -94,20 +97,25 @@ def get_dashboard(page: int = 1) -> dict[str, Any]:
 		"configuration": {
 			"restic_ready": restic_is_configured(),
 			"required_variables": [
-				{"name": name, "configured": bool(os.environ.get(name))}
-				for name in REQUIRED_RESTIC_ENV
+				{"name": name, "configured": bool(os.environ.get(name))} for name in REQUIRED_RESTIC_ENV
 			],
 			"offsite_enabled": _env_flag("RESTIC_OFFSITE_BACKUP_ENABLED"),
 			"uptime_kuma_ready": bool(os.environ.get("RESTIC_BACKUP_UPTIME_KUMA_URL")),
 		},
-		"items": items[(page - 1) * 10:page * 10],
+		"items": items[(page - 1) * 10 : page * 10],
 		"page": page,
 		"total": len(items),
 		"summary": {
 			"latest": items[0]["created"] if items else None,
 			"local_count": sum(item["local_status"] in {"Available", "Present"} for item in items),
-			"last_verified": max((str(item["remote_verified_at"]) for item in items
-				if item.get("remote_verified_at") and item["remote_status"] == "Available"), default=None),
+			"last_verified": max(
+				(
+					str(item["remote_verified_at"])
+					for item in items
+					if item.get("remote_verified_at") and item["remote_status"] == "Available"
+				),
+				default=None,
+			),
 		},
 	}
 
@@ -117,14 +125,21 @@ def _backup_inventory(runs: list, native: list, deployment: list) -> list[dict[s
 	items = {}
 	for backup in deployment:
 		items[backup["name"]] = {
-			**backup, "source": "Deployment", "local_status": backup["local_status"],
+			**backup,
+			"source": "Deployment",
+			"local_status": backup["local_status"],
 			"remote_status": "Upload recorded" if backup.get("snapshot_id") else "Not recorded",
-			"remote_verified_at": None, "run_name": None,
+			"remote_verified_at": None,
+			"run_name": None,
 		}
 	for backup in native:
 		items[backup["name"]] = {
-			**backup, "source": "Native", "local_status": "Present",
-			"remote_status": "Not recorded", "remote_verified_at": None, "run_name": None,
+			**backup,
+			"source": "Native",
+			"local_status": "Present",
+			"remote_status": "Not recorded",
+			"remote_verified_at": None,
+			"run_name": None,
 			"created": _site_timestamp(backup["modified"]),
 		}
 	for run in runs:
@@ -141,9 +156,13 @@ def _backup_inventory(runs: list, native: list, deployment: list) -> list[dict[s
 					key = str(artifact.get("name", "")).removesuffix("-database.sql.gz") or key
 		previous = items.get(key, {})
 		items[key] = {
-			**previous, "name": key, "run_name": run.name, "source": run.source,
+			**previous,
+			"name": key,
+			"run_name": run.name,
+			"source": run.source,
 			"created": previous.get("created") or str(run.started_at or run.completed_at or run.creation),
-			"status": run.status, "local_status": run.local_status,
+			"status": run.status,
+			"local_status": run.local_status,
 			"remote_status": run.remote_status or "Not Attempted",
 			"remote_verified_at": run.remote_verified_at,
 			"snapshot_id": run.restic_snapshot_id,
@@ -157,7 +176,9 @@ def _backup_inventory(runs: list, native: list, deployment: list) -> list[dict[s
 def _site_timestamp(timestamp: float) -> str:
 	from frappe.utils import convert_utc_to_system_timezone
 
-	return str(convert_utc_to_system_timezone(datetime.fromtimestamp(timestamp, timezone.utc).replace(tzinfo=None)))
+	return str(
+		convert_utc_to_system_timezone(datetime.fromtimestamp(timestamp, timezone.utc).replace(tzinfo=None))
+	)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -210,7 +231,11 @@ def _effective_local_status(run: frappe._dict) -> str:
 		artifacts = json.loads(run.get("artifact_manifest") or "[]")
 	except json.JSONDecodeError:
 		return "Invalid"
-	if not isinstance(artifacts, list) or not artifacts or any(not isinstance(item, dict) for item in artifacts):
+	if (
+		not isinstance(artifacts, list)
+		or not artifacts
+		or any(not isinstance(item, dict) for item in artifacts)
+	):
 		return "Invalid"
 	artifact_names = [str(item.get("name", "")) for item in artifacts]
 	if any(not name or Path(name).name != name for name in artifact_names):
@@ -225,7 +250,9 @@ def _native_backups() -> list[dict[str, Any]]:
 	if not root.is_dir():
 		return []
 	result = []
-	for database in sorted(root.glob("*-database.sql.gz"), key=lambda path: path.stat().st_mtime, reverse=True):
+	for database in sorted(
+		root.glob("*-database.sql.gz"), key=lambda path: path.stat().st_mtime, reverse=True
+	):
 		prefix = database.name[: -len("-database.sql.gz")]
 		artifacts = [path for path in root.glob(f"{prefix}-*") if path.is_file()]
 		result.append(
@@ -249,21 +276,32 @@ def _deployment_backups() -> list[dict[str, Any]]:
 		manifest = {}
 		manifest_path = directory / "backup-control.json"
 		try:
-			manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() else {}
+			manifest = (
+				json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() else {}
+			)
 		except (OSError, json.JSONDecodeError):
 			manifest = {"status": "Invalid manifest"}
 		if not isinstance(manifest, dict):
 			manifest = {"status": "Invalid manifest"}
 		files = [path for path in directory.iterdir() if path.is_file()]
 		artifacts = manifest.get("artifacts")
-		local_status = "Present" if any(path.name.endswith("-database.sql.gz") for path in files) else "Invalid"
+		local_status = (
+			"Present" if any(path.name.endswith("-database.sql.gz") for path in files) else "Invalid"
+		)
 		if artifacts:
-			local_status = _effective_local_status(frappe._dict(
-				local_status="Available", local_path=f"private/deployment-backups/{directory.name}",
-				artifact_manifest=json.dumps(artifacts),
-			))
+			local_status = _effective_local_status(
+				frappe._dict(
+					local_status="Available",
+					local_path=f"private/deployment-backups/{directory.name}",
+					artifact_manifest=json.dumps(artifacts),
+				)
+			)
 		try:
-			created = datetime.strptime(directory.name.split("-", 1)[0], "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc).timestamp()
+			created = (
+				datetime.strptime(directory.name.split("-", 1)[0], "%Y%m%dT%H%M%SZ")
+				.replace(tzinfo=timezone.utc)
+				.timestamp()
+			)
 		except ValueError:
 			created = directory.stat().st_mtime
 		result.append(
@@ -272,8 +310,11 @@ def _deployment_backups() -> list[dict[str, Any]]:
 				"created": _site_timestamp(created),
 				"status": manifest.get("status") or "Not recorded",
 				"local_status": local_status,
-				"retention_reason": "Kept after failed deployment" if (directory / ".failed").exists()
-					else "Kept for recovery" if (directory / ".keep").exists() else "",
+				"retention_reason": "Kept after failed deployment"
+				if (directory / ".failed").exists()
+				else "Kept for recovery"
+				if (directory / ".keep").exists()
+				else "",
 				"snapshot_id": manifest.get("restic_snapshot_id"),
 				"release_identity": manifest.get("release_identity"),
 				"artifact_count": len([path for path in files if not path.name.startswith(".")]),

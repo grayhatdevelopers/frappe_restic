@@ -11,8 +11,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from frappe_restic.config import namespace
-
 import frappe
 from frappe import _
 from frappe.utils import cint, get_time, now_datetime
@@ -20,12 +18,12 @@ from frappe.utils.background_jobs import enqueue
 from frappe.utils.backups import BackupGenerator, get_backup_path
 from redis.exceptions import LockError
 
-from frappe_restic.restic_backup.recovery import image_commit, read_json, snapshot_manifest, write_json
-
+from frappe_restic.config import namespace
 from frappe_restic.restic_backup.doctype.restic_backup_settings.restic_backup_settings import (
 	parse_backup_schedule,
 	parse_recipients,
 )
+from frappe_restic.restic_backup.recovery import image_commit, read_json, snapshot_manifest, write_json
 from frappe_restic.restic_backup.restic_transport import (
 	BackupTransportError,
 	backup_with_restic,
@@ -100,7 +98,9 @@ def run_offsite_test() -> dict[str, str]:
 	return {"name": run.name, "snapshot": run.restic_snapshot_id, "status": run.status}
 
 
-def _enqueue_backup(*, run_key: str, source: str, scheduled_for: datetime | None = None, run_inline: bool = False) -> dict[str, str]:
+def _enqueue_backup(
+	*, run_key: str, source: str, scheduled_for: datetime | None = None, run_inline: bool = False
+) -> dict[str, str]:
 	existing = frappe.db.get_value("Restic Backup Run", {"run_key": run_key}, "name")
 	if existing:
 		return {"name": existing, "status": "already_queued"}
@@ -128,7 +128,7 @@ def _enqueue_backup(*, run_key: str, source: str, scheduled_for: datetime | None
 			job_id=f"restic-backup-{frappe.local.site}-{run.name}",
 			run_name=run.name,
 		)
-	except Exception as error:  # noqa: BLE001 - preserve the durable run on queue failure
+	except Exception as error:  # preserve the durable run on queue failure
 		_fail_run(run.name, _safe_error(error))
 		frappe.log_error(title="Could not queue Restic backup", message=frappe.get_traceback())
 		raise
@@ -163,8 +163,11 @@ def execute_backup(run_name: str) -> None:
 		if not offsite:
 			completed = now_datetime()
 			_set_run(
-				run_name, status="Succeeded", remote_status="Not Attempted",
-				completed_at=completed, duration_seconds=(completed - started).total_seconds(),
+				run_name,
+				status="Succeeded",
+				remote_status="Not Attempted",
+				completed_at=completed,
+				duration_seconds=(completed - started).total_seconds(),
 				error_summary=None,
 			)
 			_prune_completed_local_backup(run_name, paths)
@@ -202,7 +205,7 @@ def execute_backup(run_name: str) -> None:
 		_prune_completed_local_backup(run_name, paths)
 		_notify_run(run_name, succeeded=True)
 		_push_heartbeat(succeeded=True, message=f"Backup {snapshot_id[:12]} completed")
-	except Exception as error:  # noqa: BLE001 - every job failure must be persisted and alerted
+	except Exception as error:  # every job failure must be persisted and alerted
 		frappe.log_error(title=f"Restic backup failed: {run_name}", message=frappe.get_traceback())
 		_fail_run(run_name, _safe_error(error), started=started)
 		if not offsite:
@@ -257,7 +260,9 @@ def _reconcile_remote_unlocked() -> dict[str, int]:
 	imported = _import_deployment_manifests()
 	updated = 0
 	for run in frappe.get_all(
-		"Restic Backup Run", filters={"restic_snapshot_id": ["is", "set"]}, fields=["name", "restic_snapshot_id"]
+		"Restic Backup Run",
+		filters={"restic_snapshot_id": ["is", "set"]},
+		fields=["name", "restic_snapshot_id"],
 	):
 		available = any(snapshot_id.startswith(run.restic_snapshot_id) for snapshot_id in remote_ids)
 		frappe.db.set_value(
@@ -345,7 +350,9 @@ def _create_full_native_backup() -> dict[str, str]:
 def _prune_local_sets(limit: int, *, protected_paths: set[str]) -> None:
 	backup_root = Path(get_backup_path()).resolve()
 	protected = {Path(path).resolve() for path in protected_paths}
-	databases = sorted(backup_root.glob("*-database.sql.gz"), key=lambda path: path.stat().st_mtime, reverse=True)
+	databases = sorted(
+		backup_root.glob("*-database.sql.gz"), key=lambda path: path.stat().st_mtime, reverse=True
+	)
 	for database in databases[limit:]:
 		prefix = database.name[: -len("-database.sql.gz")]
 		candidates = list(backup_root.glob(f"{prefix}-*"))
@@ -465,7 +472,7 @@ def _send_alert(subject: str, message: str, *, succeeded: bool = False) -> str:
 		return "Not requested"
 	try:
 		frappe.sendmail(recipients=recipients, subject=subject, message=message, delayed=False)
-	except Exception:  # noqa: BLE001 - notification failure must not replace the operation outcome
+	except Exception:  # notification failure must not replace the operation outcome
 		frappe.logger("restic_backup").exception("Could not send backup notification")
 		return "Failed"
 	return "Sent"
@@ -476,7 +483,9 @@ def _push_heartbeat(*, succeeded: bool, message: str) -> None:
 	if not url:
 		return
 	separator = "&" if "?" in url else "?"
-	query = urllib.parse.urlencode({"status": "up" if succeeded else "down", "msg": message[:200], "ping": ""})
+	query = urllib.parse.urlencode(
+		{"status": "up" if succeeded else "down", "msg": message[:200], "ping": ""}
+	)
 	try:
 		with urllib.request.urlopen(f"{url}{separator}{query}", timeout=15) as response:
 			if response.status >= 400:
@@ -490,9 +499,7 @@ def _settings_int(fieldname: str, default: int) -> int:
 
 
 def _new_backup_lock():
-	return frappe.cache.lock(
-		f"restic-backup:{frappe.local.site}", timeout=15 * 60 * 60, blocking_timeout=1
-	)
+	return frappe.cache.lock(f"restic-backup:{frappe.local.site}", timeout=15 * 60 * 60, blocking_timeout=1)
 
 
 def _release_lock(lock) -> None:
@@ -507,8 +514,12 @@ def _site_tag() -> str:
 
 
 def _stable_host() -> str:
-	return namespace() + "-" + "".join(
-		character if character.isalnum() or character in "._-" else "-" for character in frappe.local.site
+	return (
+		namespace()
+		+ "-"
+		+ "".join(
+			character if character.isalnum() or character in "._-" else "-" for character in frappe.local.site
+		)
 	)
 
 
