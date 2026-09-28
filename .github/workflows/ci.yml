@@ -18,7 +18,7 @@ jobs:
             db_image: mariadb:11.8
     name: ${{ matrix.frappe_image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # bench build writes into the app's public/dist as the image's frappe user (uid 1000).
       - run: chmod -R a+w frappe_restic/public
       - name: Tests in a disposable bench
