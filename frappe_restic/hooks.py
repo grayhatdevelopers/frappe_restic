@@ -3,7 +3,7 @@ app_title = "Restic Backups"
 app_publisher = "Grayhat Developers"
 app_description = "Backup scheduling, encrypted snapshots and recovery for Frappe"
 app_email = ""
-app_license = "MIT"
+app_license = "mit"
 required_apps = ["frappe"]
 
 page_js = {"backups": "public/js/restic_backups_page.js"}
