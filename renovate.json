@@ -1,0 +1,31 @@
+{
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"extends": ["config:recommended"],
+	"semanticCommits": "enabled",
+	"schedule": ["before 6am on monday"],
+	"customManagers": [
+		{
+			"customType": "regex",
+			"description": "Frappe images in the CI matrix",
+			"managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
+			"matchStrings": ["frappe_image: (?<depName>frappe/erpnext):(?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+			"datasourceTemplate": "docker"
+		}
+	],
+	"packageRules": [
+		{
+			"description": "v15 and v16 stay on their major; a new major is a deliberate matrix change",
+			"matchPackageNames": ["frappe/erpnext"],
+			"matchUpdateTypes": ["major"],
+			"enabled": false
+		},
+		{
+			"matchPackageNames": ["frappe/erpnext"],
+			"groupName": "Frappe images"
+		},
+		{
+			"matchManagers": ["github-actions"],
+			"groupName": "GitHub Actions"
+		}
+	]
+}
