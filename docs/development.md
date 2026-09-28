@@ -33,3 +33,22 @@ guard, and a backup from the restored site. See the header of `tests/drill/run.s
 
 The drill forgets the snapshots it created and removes its containers, volumes and
 image. Set `KEEP=1` to keep them for inspection. Record results in `docs/validation/`.
+
+## Releases
+
+Pull requests go to `develop` and are squash-merged, so their titles must follow
+[Conventional Commits](https://www.conventionalcommits.org/) (`fix:`, `feat:`, `docs:`, ...).
+A bot keeps a `develop` → `main` pull request open; merging it (as a merge commit) runs
+semantic-release, which picks the next version from those titles, bumps
+`frappe_restic/__init__.py`, tags and publishes the GitHub release:
+
+| Since the last release | Next version |
+|---|---|
+| a breaking change (`feat!:` or a `BREAKING CHANGE:` footer) | major |
+| a `feat:` | minor |
+| only `fix:` / `perf:` | patch |
+| nothing else (`docs:`, `ci:`, `test:`, `chore:`) | no release |
+
+The workflows need a `RELEASE_TOKEN` repository secret: a fine-grained token for this repository
+with read/write Contents, Pull requests and Issues, owned by an admin so the version bump can
+pass `main`'s pull request rule.
