@@ -30,3 +30,17 @@ jobs:
           FRAPPE_IMAGE: ${{ matrix.frappe_image }}
           DB_IMAGE: ${{ matrix.db_image }}
         run: tests/docker/run.sh
+
+  linters:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - run: pip install pre-commit semgrep
+      - run: pre-commit run --all-files --show-diff-on-failure
+      - name: Frappe's Semgrep rules
+        run: |
+          git clone --depth 1 https://github.com/frappe/semgrep-rules.git /tmp/frappe-semgrep-rules
+          semgrep --error --config /tmp/frappe-semgrep-rules/rules --config r/python.lang.correctness .
