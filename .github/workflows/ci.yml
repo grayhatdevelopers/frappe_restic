@@ -11,12 +11,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Renovate proposes new images within each major (renovate.json).
         include:
-          - frappe_image: frappe/erpnext:v15.121.3
+          - frappe: v15
+            frappe_image: frappe/erpnext:v15.121.3
             db_image: mariadb:10.6
-          - frappe_image: frappe/erpnext:v16.36.0
+          - frappe: v16
+            frappe_image: frappe/erpnext:v16.36.0
             db_image: mariadb:11.8
-    name: ${{ matrix.frappe_image }}
+    # Stable name for required checks, independent of the exact image.
+    name: ${{ matrix.frappe }}
     steps:
       - uses: actions/checkout@v7
       # bench build writes into the app's public/dist as the image's frappe user (uid 1000).
