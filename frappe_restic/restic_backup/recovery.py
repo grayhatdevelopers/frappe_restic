@@ -167,7 +167,8 @@ def restore_database(site: str, database: str) -> None:
 				mariadb_user_host_login_scope="%",
 			)
 			validate_restored_encryption()
-			frappe.db.commit()
+			# A standalone process: no request or job commits for it.
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit
 	finally:
 		frappe.destroy()
 

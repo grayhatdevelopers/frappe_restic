@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import frappe
+from frappe import _
 from frappe.utils import cint
 from frappe.utils.backups import get_backup_path
 
@@ -41,7 +42,7 @@ def get_recovery_details(run_name: str | None = None, snapshot_id: str | None = 
 	if run_name:
 		snapshot = frappe.get_doc("Restic Backup Run", run_name).restic_snapshot_id or ""
 	if not re.fullmatch(r"[0-9a-f]{8,64}", snapshot):
-		frappe.throw("This run has no usable off-site snapshot ID.")
+		frappe.throw(_("This run has no usable off-site snapshot ID."))
 	result = _run(["restic", "dump", snapshot, "/recovery.json"], timeout=60)
 	manifest = json.loads(result.stdout)
 	if (
@@ -49,7 +50,7 @@ def get_recovery_details(run_name: str | None = None, snapshot_id: str | None = 
 		or manifest.get("version") != 1
 		or manifest.get("site") != frappe.local.site
 	):
-		frappe.throw("Snapshot recovery metadata does not match this site.")
+		frappe.throw(_("Snapshot recovery metadata does not match this site."))
 	commit = manifest.get("commit", "")
 	if not isinstance(commit, str):
 		commit = "unknown"
@@ -187,7 +188,7 @@ def save_settings(values: str | dict[str, Any]) -> dict[str, Any]:
 	_require_system_manager()
 	payload = frappe.parse_json(values) if isinstance(values, str) else values
 	if not isinstance(payload, dict):
-		frappe.throw("Backup settings must be an object.")
+		frappe.throw(_("Backup settings must be an object."))
 
 	settings = frappe.get_single("Restic Backup Settings")
 	for fieldname in EDITABLE_SETTING_FIELDS:

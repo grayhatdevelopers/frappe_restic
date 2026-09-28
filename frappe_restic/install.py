@@ -1,6 +1,7 @@
 """Installation checks for the supported Frappe releases."""
 
 import frappe
+from frappe import _
 
 SUPPORTED_MAJORS = ("15", "16")
 
@@ -15,4 +16,4 @@ def after_install() -> None:
 	from frappe import __version__
 
 	if not is_supported_version(__version__):
-		frappe.throw("Restic Backups supports Frappe v15 and v16 only.")
+		frappe.throw(_("Restic Backups supports Frappe v15 and v16 only."))

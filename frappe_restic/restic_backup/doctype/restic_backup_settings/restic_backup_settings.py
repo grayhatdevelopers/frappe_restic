@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 from frappe.utils import cint, get_time
 
@@ -47,13 +48,13 @@ class ResticBackupSettings(Document):
 			)
 
 		if not 1 <= cint(self.local_backup_limit) <= 30:
-			frappe.throw("Local Backup Sets must be between 1 and 30.")
+			frappe.throw(_("Local Backup Sets must be between 1 and 30."))
 		if not 1 <= cint(self.remote_keep_days) <= 3650:
-			frappe.throw("Remote Retention must be between 1 and 3650 days.")
+			frappe.throw(_("Remote Retention must be between 1 and 3650 days."))
 
 		for email in parse_recipients(self.notification_recipients):
 			if not EMAIL_PATTERN.match(email):
-				frappe.throw(f"Invalid notification email address: {email}")
+				frappe.throw(_("Invalid notification email address: {0}").format(email))
 
 		frappe.db.set_single_value("System Settings", "backup_limit", cint(self.local_backup_limit))
 
@@ -63,9 +64,9 @@ def parse_working_days(value: str | None) -> list[str]:
 	days = list(dict.fromkeys(part.strip().title() for part in (value or "").split(",") if part.strip()))
 	invalid = [day for day in days if day not in WEEKDAYS]
 	if invalid:
-		frappe.throw(f"Invalid working day(s): {', '.join(invalid)}")
+		frappe.throw(_("Invalid working day(s): {0}").format(", ".join(invalid)))
 	if not days:
-		frappe.throw("At least one working day is required.")
+		frappe.throw(_("At least one working day is required."))
 	return days
 
 
@@ -79,17 +80,17 @@ def parse_backup_schedule(rows) -> list[tuple[list[str], str]]:
 			days_value = ",".join(str(day) for day in days_value)
 		days = parse_working_days(str(days_value))
 		if not row.get("backup_time"):
-			frappe.throw("Each backup schedule row requires a time.")
+			frappe.throw(_("Each backup schedule row requires a time."))
 		backup_time = get_time(row.get("backup_time")).strftime("%H:%M:%S")
 		for day in days:
 			slot = (day, backup_time)
 			if slot in seen_slots:
-				frappe.throw(f"Duplicate backup schedule entry: {day} at {backup_time}.")
+				frappe.throw(_("Duplicate backup schedule entry: {0} at {1}.").format(day, backup_time))
 			seen_slots.add(slot)
 		schedule.append((days, backup_time))
 
 	if not schedule:
-		frappe.throw("At least one backup schedule row is required.")
+		frappe.throw(_("At least one backup schedule row is required."))
 	return sorted(schedule, key=lambda row: row[1])
 
 

@@ -116,7 +116,8 @@ def _enqueue_backup(
 			"remote_status": "Not Attempted",
 		}
 	).insert(ignore_permissions=True)
-	frappe.db.commit()
+	# The worker reads the run on its own connection, and the run must outlive a failed enqueue.
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit
 	if run_inline:
 		execute_backup(run.name)
 		return {"name": run.name, "status": "completed"}
@@ -272,7 +273,8 @@ def _reconcile_remote_unlocked() -> dict[str, int]:
 			update_modified=False,
 		)
 		updated += 1
-	frappe.db.commit()
+	# Persist the inventory before the caller releases the site lock.
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit
 	return {"remote_runs": updated, "deployment_runs": imported}
 
 
@@ -405,7 +407,8 @@ def _import_deployment_manifests() -> int:
 
 def _set_run(run_name: str, **values: Any) -> None:
 	frappe.db.set_value("Restic Backup Run", run_name, values, update_modified=False)
-	frappe.db.commit()
+	# Progress must show while a long job runs and survive the rollback of a failed one.
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit
 
 
 def _fail_run(run_name: str, message: str, *, started: datetime | None = None) -> None:
