@@ -5,3 +5,4 @@ __pycache__/
 .local/
 node_modules/
 frappe_restic/public/dist/
+tests/drill/.drill-*

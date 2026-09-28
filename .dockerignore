@@ -1,0 +1,9 @@
+# Keep secrets and local state out of every image build context.
+.env*
+!.env.test.example
+.git/
+.local/
+**/__pycache__/
+**/*.egg-info/
+node_modules/
+frappe_restic/public/dist/

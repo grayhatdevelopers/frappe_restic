@@ -1,0 +1,14 @@
+# The app baked into a stock Frappe image, the way a deployment image carries it.
+ARG FRAPPE_IMAGE=frappe/erpnext:v16.36.0
+FROM ${FRAPPE_IMAGE}
+WORKDIR /home/frappe/frappe-bench
+COPY --chown=frappe:frappe . apps/frappe_restic
+# Build into the baked assets directory that the image entrypoint links into sites/.
+RUN set -eux; \
+    export PATH="$(dirname "$(ls -d /home/frappe/.nvm/versions/node/*/bin/node)"):${PATH}"; \
+    env/bin/pip install --quiet -e apps/frappe_restic; \
+    [ -z "$(tail -c 1 sites/apps.txt)" ] || echo >> sites/apps.txt; \
+    echo frappe_restic >> sites/apps.txt; \
+    ln -s ../assets sites/assets; \
+    bench build --app frappe_restic; \
+    rm sites/assets

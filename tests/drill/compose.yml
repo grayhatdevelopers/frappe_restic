@@ -1,0 +1,97 @@
+# End-to-end drill against a real Restic repository. Run through tests/drill/run.sh.
+# Nothing is published to the host; checks run from the tools container.
+x-app: &app
+  image: ${DRILL_IMAGE:?DRILL_IMAGE is required}
+  environment:
+    SITE_NAME: ${SITE_NAME:?SITE_NAME is required}
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+    - ./:/drill:ro
+
+# Repository credentials and the database root password, only where they are used.
+x-operator: &operator
+  <<: *app
+  env_file: ../../.env.test
+  environment:
+    SITE_NAME: ${SITE_NAME}
+    DB_ROOT_PASSWORD: frappe-restic-drill
+    RESTIC_OFFSITE_BACKUP_ENABLED: "1"
+
+x-guarded: &guarded
+  entrypoint:
+    - bash
+    - /home/frappe/frappe-bench/apps/frappe_restic/frappe_restic/bin/runtime-guard.sh
+    - /usr/local/bin/entrypoint.sh
+  profiles: [app]
+
+services:
+  db:
+    image: mariadb:11.8
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+    environment:
+      MARIADB_ROOT_PASSWORD: frappe-restic-drill
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 2s
+      timeout: 5s
+      retries: 60
+
+  redis-cache:
+    image: redis:6.2-alpine
+
+  redis-queue:
+    image: redis:6.2-alpine
+
+  tools:
+    <<: *operator
+    command: [sleep, infinity]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  site-operation:
+    <<: *operator
+    profiles: [ops]
+    restart: "no"
+    hostname: ${OP_HOSTNAME:-site-operation}
+    entrypoint:
+      - /usr/local/bin/entrypoint.sh
+      - bash
+      - /home/frappe/frappe-bench/apps/frappe_restic/frappe_restic/bin/migrate-site.sh
+    environment:
+      SITE_NAME: ${SITE_NAME}
+      DB_ROOT_PASSWORD: frappe-restic-drill
+      RESTIC_OFFSITE_BACKUP_ENABLED: "1"
+      RESTIC_CONFIGURE_EXECUTABLE: /drill/configure.sh
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - ./:/drill:ro
+      - ./bench-wrapper.sh:/home/frappe/frappe-bench/env/bin/bench:ro
+
+  backend:
+    <<: [*guarded, *app]
+    command: [start.sh]
+
+  websocket:
+    <<: [*guarded, *app]
+    command: [node, /home/frappe/frappe-bench/apps/frappe/socketio.js]
+
+  queue-long:
+    <<: [*guarded, *operator]
+    command: [bench, worker, --queue, "long,default,short"]
+
+  frontend:
+    <<: [*guarded, *app]
+    command: [nginx-entrypoint.sh]
+    # nginx resolves its upstreams once, at startup.
+    depends_on: [backend, websocket]
+    environment:
+      BACKEND: backend:8000
+      SOCKETIO: websocket:9000
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME}
+
+volumes:
+  sites:
