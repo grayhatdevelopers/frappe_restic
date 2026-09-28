@@ -17,12 +17,9 @@ bench set-config -g redis_queue redis://redis-queue:6379
 bench set-config -g redis_socketio redis://redis-queue:6379
 
 echo "== Install app into the bench"
-pip install --quiet -e apps/frappe_restic
-if ! grep -qx frappe_restic sites/apps.txt; then
-    [[ -z "$(tail -c 1 sites/apps.txt)" ]] || echo >> sites/apps.txt
-    echo frappe_restic >> sites/apps.txt
-fi
-bench build --app frappe_restic
+# The checkout is mounted from the host, so another user owns it.
+git config --global --add safe.directory /home/frappe/frappe_restic
+bench get-app --soft-link /home/frappe/frappe_restic
 
 echo "== Create site"
 bench new-site \
