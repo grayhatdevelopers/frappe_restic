@@ -3,7 +3,7 @@ frappe.ui.form.on("Restic Backup Settings", {
 		frm.page.set_title(__("Backup Settings"));
 		frappe.breadcrumbs.add({
 			type: "Custom",
-			route: "/app/restic-backup-control",
+			route: frappe.router.make_url(["restic-backup-control"]),
 			label: __("Backup Control"),
 		});
 		frm.add_custom_button(__("Back to Backup Control"), () => {

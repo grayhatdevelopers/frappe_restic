@@ -38,7 +38,8 @@ python -m unittest \
     frappe_restic.restic_backup.test_restic_transport \
     frappe_restic.restic_backup.test_recovery \
     frappe_restic.restic_backup.test_deployment \
-    frappe_restic.test_install
+    frappe_restic.test_install \
+    frappe_restic.test_routes
 
 echo "== Frappe tests"
 bench --site "${SITE_NAME}" run-tests --app frappe_restic
