@@ -23,4 +23,4 @@ cleanup() {
 trap cleanup EXIT
 
 docker compose up -d --wait
-docker compose exec -T bench bash /home/frappe/frappe-bench/apps/frappe_restic/tests/docker/in-bench.sh
+docker compose exec -T bench bash /home/frappe/frappe_restic/tests/docker/in-bench.sh

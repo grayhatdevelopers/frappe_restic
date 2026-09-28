@@ -69,7 +69,9 @@ def file_roots(staged: Path) -> dict[str, str]:
 	"""Locate the expanded Frappe tar layout, including its site prefix."""
 	roots = {}
 	for kind in ("public", "private"):
-		matches = [path for path in (staged / kind).rglob("files") if path.is_dir() and path.parent.name == kind]
+		matches = [
+			path for path in (staged / kind).rglob("files") if path.is_dir() and path.parent.name == kind
+		]
 		if len(matches) != 1:
 			raise ValueError(f"Expected exactly one {kind}/files directory in backup")
 		roots[kind] = matches[0].relative_to(staged).as_posix()
@@ -78,7 +80,13 @@ def file_roots(staged: Path) -> dict[str, str]:
 
 def snapshot_manifest(staged: Path, *, site: str, commit: str) -> dict[str, Any]:
 	"""Describe a staged backup so recovery can validate it independently."""
-	manifest = {"version": 1, "site": site, "commit": commit, "created_at": utc_now(), "file_roots": file_roots(staged)}
+	manifest = {
+		"version": 1,
+		"site": site,
+		"commit": commit,
+		"created_at": utc_now(),
+		"file_roots": file_roots(staged),
+	}
 	write_json(staged / MANIFEST_FILE, manifest)
 	return manifest
 
@@ -116,7 +124,10 @@ def latest_snapshot(site: str) -> str:
 	try:
 		result = subprocess.run(
 			["restic", "snapshots", "--json", "--tag", tag],
-			check=True, capture_output=True, text=True, timeout=60,
+			check=True,
+			capture_output=True,
+			text=True,
+			timeout=60,
 		)
 	except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
 		raise RuntimeError("Could not list backups for latest recovery") from error
@@ -147,13 +158,17 @@ def restore_database(site: str, database: str) -> None:
 		# the scheduler setting imported from the backup.
 		with filelock("bench_new_site", timeout=1):
 			install_db(
-				db_name=frappe.conf.db_name, root_login="root",
+				db_name=frappe.conf.db_name,
+				root_login="root",
 				root_password=os.environ["DB_ROOT_PASSWORD"],
-				source_sql=database, force=True, db_type="mariadb",
+				source_sql=database,
+				force=True,
+				db_type="mariadb",
 				mariadb_user_host_login_scope="%",
 			)
 			validate_restored_encryption()
-			frappe.db.commit()
+			# A standalone process: no request or job commits for it.
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit
 	finally:
 		frappe.destroy()
 
@@ -171,10 +186,23 @@ def validate_restored_encryption() -> None:
 		)
 
 
-def replace_site_data(site: str, site_path: Path, content: Path, roots: dict[str, str], config: dict[str, Any]) -> None:
+def replace_site_data(
+	site: str, site_path: Path, content: Path, roots: dict[str, str], config: dict[str, Any]
+) -> None:
 	"""Replace a stopped site's configuration, database and uploads with an expanded backup."""
 	write_json(site_path / "site_config.json", config)
-	run([sys.executable, "-m", "frappe_restic.restic_backup.recovery", "restore-database", "--site", site, "--database", str(content / "database.sql")])
+	run(
+		[
+			sys.executable,
+			"-m",
+			"frappe_restic.restic_backup.recovery",
+			"restore-database",
+			"--site",
+			site,
+			"--database",
+			str(content / "database.sql"),
+		]
+	)
 	for kind in ("public", "private"):
 		target = site_path / kind / "files"
 		if not target.resolve().is_relative_to(site_path.resolve()) or target.is_symlink():
@@ -188,7 +216,9 @@ def restore_local_backup(site: str, site_path: Path, backup: Path, config: dict[
 	"""Return a stopped site to a native backup set taken before a destructive operation."""
 	from frappe_restic.restic_backup.restic_transport import discover_backup_set, stable_staging_tree
 
-	with stable_staging_tree(discover_backup_set(backup), site_path / "private" / ".frappe-restic-rollback-stage") as content:
+	with stable_staging_tree(
+		discover_backup_set(backup), site_path / "private" / ".frappe-restic-rollback-stage"
+	) as content:
 		replace_site_data(site, site_path, content, file_roots(content), config)
 	run(["bench", "--site", site, "clear-cache"])
 
@@ -222,16 +252,27 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 		try:
 			fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 		except BlockingIOError as error:
-			raise ValueError("Stop frontend, backend, websocket, scheduler and all queues before recovery") from error
+			raise ValueError(
+				"Stop frontend, backend, websocket, scheduler and all queues before recovery"
+			) from error
 		if blocked.exists() and read_json(blocked).get("site") != site:
 			raise ValueError("Another site's incomplete recovery blocks this bench")
 		if receipt.exists():
 			previous = read_json(receipt)
-			previous_identity = {**previous, "snapshot": previous.get("snapshot_selector", previous.get("snapshot"))}
-			if all(previous_identity.get(key) == value for key, value in identity.items()) and previous.get("status") == "Completed" and not blocked.exists():
+			previous_identity = {
+				**previous,
+				"snapshot": previous.get("snapshot_selector", previous.get("snapshot")),
+			}
+			if (
+				all(previous_identity.get(key) == value for key, value in identity.items())
+				and previous.get("status") == "Completed"
+				and not blocked.exists()
+			):
 				print("This restore already completed; database and files were not touched.")
 				return
-			raise ValueError("Restore request already consumed or interrupted; inspect its receipt before starting a new restore deployment")
+			raise ValueError(
+				"Restore request already consumed or interrupted; inspect its receipt before starting a new restore deployment"
+			)
 		identity["snapshot_selector"] = snapshot
 		if snapshot == "latest":
 			snapshot = latest_snapshot(site)
@@ -243,7 +284,9 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 			run(["restic", "restore", snapshot, "--target", str(root), "--verify"])
 			manifests = list(root.rglob(MANIFEST_FILE))
 			if len(manifests) != 1:
-				raise ValueError("Snapshot has no unique recovery.json; legacy snapshots require manual recovery")
+				raise ValueError(
+					"Snapshot has no unique recovery.json; legacy snapshots require manual recovery"
+				)
 			content = manifests[0].parent
 			manifest = validate_snapshot(content, site=site)
 			identity["backup_commit"] = manifest.get("commit", "unknown")
@@ -259,9 +302,23 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 				try:
 					safety.mkdir(parents=True, exist_ok=False)
 					(safety / ".keep").touch()
-					run(["bench", "--site", site, "backup", "--with-files", "--ignore-backup-conf", "--backup-path", str(safety)])
+					run(
+						[
+							"bench",
+							"--site",
+							site,
+							"backup",
+							"--with-files",
+							"--ignore-backup-conf",
+							"--backup-path",
+							str(safety),
+						]
+					)
 				except Exception as error:
-					write_json(receipt, {**identity, "status": "Failed", "error": str(error)[:500], "failed_at": utc_now()})
+					write_json(
+						receipt,
+						{**identity, "status": "Failed", "error": str(error)[:500], "failed_at": utc_now()},
+					)
 					print("Safety backup failed; the site was not changed.", file=sys.stderr)
 					raise
 				# An already blocked site is not a state worth returning to.
@@ -270,10 +327,29 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 			try:
 				config = read_json(content / "site_config.json")
 				# Keep keys/settings from the backup, but never its old server/database connection.
-				for key in ("db_name", "db_user", "db_password", "db_host", "db_port", "db_socket", "redis_cache", "redis_queue", "redis_socketio", "host_name"):
+				for key in (
+					"db_name",
+					"db_user",
+					"db_password",
+					"db_host",
+					"db_port",
+					"db_socket",
+					"redis_cache",
+					"redis_queue",
+					"redis_socketio",
+					"host_name",
+				):
 					config.pop(key, None)
 				# A site-specific connection survives; otherwise common_site_config supplies it.
-				for key in ("db_name", "db_user", "db_password", "db_host", "db_port", "db_socket", "host_name"):
+				for key in (
+					"db_name",
+					"db_user",
+					"db_password",
+					"db_host",
+					"db_port",
+					"db_socket",
+					"host_name",
+				):
 					if key in current:
 						config[key] = current[key]
 				if not config.get("db_name"):
@@ -305,7 +381,16 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 				print("Recovery and migration completed.")
 			except Exception as error:
 				if rollback:
-					roll_back_restore(site, site_path, rollback, current, receipt=receipt, identity=identity, error=error, blocked=blocked)
+					roll_back_restore(
+						site,
+						site_path,
+						rollback,
+						current,
+						receipt=receipt,
+						identity=identity,
+						error=error,
+						blocked=blocked,
+					)
 				raise
 			finally:
 				if blocked.exists() and config_path.exists():
@@ -314,12 +399,24 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 					write_json(config_path, config)
 
 
-def roll_back_restore(site: str, site_path: Path, safety: Path, original: dict[str, Any], *, receipt: Path, identity: dict[str, Any], error: Exception, blocked: Path) -> None:
+def roll_back_restore(
+	site: str,
+	site_path: Path,
+	safety: Path,
+	original: dict[str, Any],
+	*,
+	receipt: Path,
+	identity: dict[str, Any],
+	error: Exception,
+	blocked: Path,
+) -> None:
 	"""Return a failed restore to the site's safety backup; startup stays blocked if that fails."""
 	failure = {**identity, "error": str(error)[:500]}
 	print("Restore failed; returning the site to its safety backup...", file=sys.stderr, flush=True)
 	try:
-		restore_local_backup(site, site_path, safety, {**original, "maintenance_mode": 1, "pause_scheduler": 1})
+		restore_local_backup(
+			site, site_path, safety, {**original, "maintenance_mode": 1, "pause_scheduler": 1}
+		)
 		write_json(site_path / "site_config.json", original)
 	except Exception:
 		write_json(receipt, {**failure, "status": "Rollback Failed", "failed_at": utc_now()})
@@ -336,7 +433,11 @@ def main() -> None:
 	parser.add_argument("operation", choices=("restore", "record-release", "restore-database"))
 	parser.add_argument("--site")
 	parser.add_argument("--database")
-	parser.add_argument("--skip-safety-backup", action="store_true", help="Emergency console recovery only: existing site cannot be backed up")
+	parser.add_argument(
+		"--skip-safety-backup",
+		action="store_true",
+		help="Emergency console recovery only: existing site cannot be backed up",
+	)
 	args = parser.parse_args()
 	root = bench_root()
 	os.chdir(root)

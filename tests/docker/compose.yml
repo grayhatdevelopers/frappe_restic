@@ -35,7 +35,8 @@ services:
       DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-frappe-restic-test}
       SITE_NAME: test.localhost
     volumes:
-      - ../..:/home/frappe/frappe-bench/apps/frappe_restic
+      # Outside the bench, so get-app installs it the way a build does.
+      - ../..:/home/frappe/frappe_restic
       - sites:/home/frappe/frappe-bench/sites
 
 volumes:

@@ -35,6 +35,7 @@ class TestBackupControl(TestCase):
 
 	def test_inventory_overrides_stale_deployment_manifest(self) -> None:
 		runs = []
+
 		def import_manifest():
 			runs.append(frappe._dict(name="deployment", restic_snapshot_id="abc123"))
 			return 1
@@ -96,7 +97,6 @@ class TestBackupControl(TestCase):
 		fail.assert_not_called()
 		self.assertTrue(any(call.kwargs.get("status") == "Succeeded" for call in set_run.call_args_list))
 
-
 	def test_local_backup_succeeds_without_reading_credentials_or_contacting_remote(self) -> None:
 		with (
 			patch.dict(os.environ, {"RESTIC_OFFSITE_BACKUP_ENABLED": "0"}),
@@ -116,9 +116,13 @@ class TestBackupControl(TestCase):
 		upload.assert_not_called()
 		heartbeat.assert_not_called()
 		retention.assert_called_once()
-		self.assertTrue(any(call.kwargs.get("status") == "Succeeded" and
-		                    call.kwargs.get("remote_status") == "Not Attempted"
-		                    for call in updates.call_args_list))
+		self.assertTrue(
+			any(
+				call.kwargs.get("status") == "Succeeded"
+				and call.kwargs.get("remote_status") == "Not Attempted"
+				for call in updates.call_args_list
+			)
+		)
 
 	def test_disabled_offsite_blocks_queued_and_scheduled_remote_maintenance(self) -> None:
 		with (
@@ -137,7 +141,10 @@ class TestBackupControl(TestCase):
 	def test_failures_recorded_while_stopped_are_alerted_once(self) -> None:
 		with tempfile.TemporaryDirectory() as directory:
 			receipts = Path(directory)
-			write_json(receipts / "rolled-back.json", {"status": "Rolled Back", "snapshot": "abc", "error": "migrate failed"})
+			write_json(
+				receipts / "rolled-back.json",
+				{"status": "Rolled Back", "snapshot": "abc", "error": "migrate failed"},
+			)
 			write_json(receipts / "completed.json", {"status": "Completed", "snapshot": "abc"})
 			with (
 				patch.object(control, "_receipt_directory", return_value=receipts),

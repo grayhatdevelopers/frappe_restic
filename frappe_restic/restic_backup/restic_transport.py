@@ -20,7 +20,6 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from frappe_restic.config import namespace
-
 from frappe_restic.restic_backup.recovery import deployed_commit, image_commit, snapshot_manifest
 
 REQUIRED_RESTIC_ENV = (
@@ -48,8 +47,7 @@ def release_identity(environment: dict[str, str] | None = None) -> str:
 def release_tag(identity: str) -> str:
 	"""Return a bounded Restic tag for a release identity."""
 	safe_identity = "".join(
-		character if character.isalnum() or character in "._-" else "-"
-		for character in identity
+		character if character.isalnum() or character in "._-" else "-" for character in identity
 	)
 	return f"{namespace()}-release:{safe_identity[:80]}"
 
@@ -89,9 +87,7 @@ def validate_backup_set(paths: dict[str, str | Path]) -> list[Artifact]:
 			_validate_artifact(kind, path)
 		except (OSError, EOFError, ValueError, tarfile.TarError) as error:
 			raise BackupTransportError(f"Invalid {kind} backup: {path.name}") from error
-		artifacts.append(
-			Artifact(kind=kind, name=path.name, size=path.stat().st_size, sha256=_sha256(path))
-		)
+		artifacts.append(Artifact(kind=kind, name=path.name, size=path.stat().st_size, sha256=_sha256(path)))
 	return artifacts
 
 
@@ -114,9 +110,7 @@ def stage_backup_set(paths: dict[str, str | Path], destination: str | Path) -> P
 
 
 @contextmanager
-def stable_staging_tree(
-	paths: dict[str, str | Path], staging_root: str | Path
-) -> Iterable[Path]:
+def stable_staging_tree(paths: dict[str, str | Path], staging_root: str | Path) -> Iterable[Path]:
 	"""Build and remove a fixed-name plaintext tree for stable Restic snapshots."""
 	root = Path(staging_root)
 	if not root.name.startswith(".frappe-restic-") or root.is_symlink():
@@ -173,9 +167,7 @@ def backup_with_restic(
 def list_snapshots(*, site_tag: str, connections: int = 2) -> list[dict[str, Any]]:
 	"""Read the repository inventory once for controlled reconciliation."""
 	_validate_environment()
-	result = _run(
-		["restic", "-o", f"s3.connections={connections}", "snapshots", "--json", "--tag", site_tag]
-	)
+	result = _run(["restic", "-o", f"s3.connections={connections}", "snapshots", "--json", "--tag", site_tag])
 	try:
 		payload = json.loads(result.stdout or "[]")
 	except json.JSONDecodeError as error:
@@ -263,14 +255,18 @@ def write_local_deployment_manifest(backup_directory: str | Path, *, site: str) 
 def discover_backup_set(directory: str | Path) -> dict[str, Path]:
 	"""Find exactly one latest complete Frappe backup set in a directory."""
 	root = Path(directory).resolve()
-	database_files = sorted(root.glob("*-database.sql.gz"), key=lambda path: path.stat().st_mtime, reverse=True)
+	database_files = sorted(
+		root.glob("*-database.sql.gz"), key=lambda path: path.stat().st_mtime, reverse=True
+	)
 	for database in database_files:
 		prefix = database.name[: -len("-database.sql.gz")]
 		paths = {
 			"database": database,
 			"config": root / f"{prefix}-site_config_backup.json",
 			"public": _first_existing(root / f"{prefix}-files.tgz", root / f"{prefix}-files.tar"),
-			"private": _first_existing(root / f"{prefix}-private-files.tgz", root / f"{prefix}-private-files.tar"),
+			"private": _first_existing(
+				root / f"{prefix}-private-files.tgz", root / f"{prefix}-private-files.tar"
+			),
 		}
 		if all(path and path.is_file() for path in paths.values()):
 			return paths
@@ -355,8 +351,11 @@ def _repository_is_missing(result: subprocess.CompletedProcess[str]) -> bool:
 	# Failure to open config alone can mean denied access, DNS, TLS or network errors.
 	# Only a missing config object/file is permission to initialize; not a missing bucket.
 	return "unable to open config file" in message and any(
-		missing in message for missing in (
-			"the specified key does not exist", "nosuchkey", "no such file or directory",
+		missing in message
+		for missing in (
+			"the specified key does not exist",
+			"nosuchkey",
+			"no such file or directory",
 			"config file does not exist",
 		)
 	)
@@ -369,7 +368,11 @@ def _validate_environment() -> None:
 
 
 def _stable_host(site: str) -> str:
-	return namespace() + "-" + "".join(character if character.isalnum() or character in "._-" else "-" for character in site)
+	return (
+		namespace()
+		+ "-"
+		+ "".join(character if character.isalnum() or character in "._-" else "-" for character in site)
+	)
 
 
 def _first_existing(*paths: Path) -> Path:
@@ -397,7 +400,9 @@ def main() -> int:
 				site=args.site,
 				connections=args.connections,
 			)
-			_push_deployment_heartbeat(True, f"Deployment backup {manifest['restic_snapshot_id'][:12]} completed")
+			_push_deployment_heartbeat(
+				True, f"Deployment backup {manifest['restic_snapshot_id'][:12]} completed"
+			)
 	except BackupTransportError as error:
 		_mark_deployment_failure(Path(args.deployment_directory), error)
 		_push_deployment_heartbeat(False, str(error))
@@ -423,7 +428,9 @@ def _push_deployment_heartbeat(succeeded: bool, message: str) -> None:
 	if not url:
 		return
 	separator = "&" if "?" in url else "?"
-	query = urllib.parse.urlencode({"status": "up" if succeeded else "down", "msg": message[:200], "ping": ""})
+	query = urllib.parse.urlencode(
+		{"status": "up" if succeeded else "down", "msg": message[:200], "ping": ""}
+	)
 	try:
 		with urllib.request.urlopen(f"{url}{separator}{query}", timeout=15):
 			pass
