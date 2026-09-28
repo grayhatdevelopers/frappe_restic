@@ -15,6 +15,11 @@
 	],
 	"packageRules": [
 		{
+			"description": "Build tooling follows Frappe's app template (flit_core <4)",
+			"matchManagers": ["pep621"],
+			"enabled": false
+		},
+		{
 			"description": "v15 and v16 stay on their major; a new major is a deliberate matrix change",
 			"matchPackageNames": ["frappe/erpnext"],
 			"matchUpdateTypes": ["major"],
