@@ -127,6 +127,23 @@ class TestResticTransport(unittest.TestCase):
 			with self.assertRaisesRegex(BackupTransportError, "Unsafe archive member"):
 				validate_backup_set(paths)
 
+	def test_staging_strips_unsafe_permissions_on_every_python(self) -> None:
+		# Python 3.14 (Frappe v16) filters extraction by default; 3.11 (v15) does not.
+		with tempfile.TemporaryDirectory() as temporary_directory:
+			root = Path(temporary_directory)
+			paths = self._create_backup_set(root)
+			with tarfile.open(paths["public"], "w:gz") as archive:
+				payload = b"upload"
+				member = tarfile.TarInfo("public/files/readme.txt")
+				member.size = len(payload)
+				member.mode = 0o4777
+				archive.addfile(member, io.BytesIO(payload))
+
+			staged = stage_backup_set(paths, root / "staged")
+			mode = (staged / "public" / "public" / "files" / "readme.txt").stat().st_mode & 0o7777
+			self.assertEqual(mode & 0o4000, 0)
+			self.assertEqual(mode & 0o022, 0)
+
 	def test_discovers_latest_complete_set(self) -> None:
 		with tempfile.TemporaryDirectory() as temporary_directory:
 			root = Path(temporary_directory)

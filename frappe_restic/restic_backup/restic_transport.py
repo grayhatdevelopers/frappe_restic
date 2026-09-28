@@ -13,7 +13,6 @@ import sys
 import tarfile
 import urllib.parse
 import urllib.request
-import warnings
 from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
@@ -296,9 +295,8 @@ def _validate_artifact(kind: str, path: Path) -> None:
 def _safe_extract(archive: tarfile.TarFile, destination: Path) -> None:
 	for member in archive.getmembers():
 		_validate_archive_member(member)
-	with warnings.catch_warnings():
-		warnings.simplefilter("ignore", DeprecationWarning)
-		archive.extractall(destination)
+	# Explicit so Python 3.11 (v15) and 3.14 (v16) extract identically.
+	archive.extractall(destination, filter="data")
 
 
 def _validate_archive_member(member: tarfile.TarInfo) -> None:
