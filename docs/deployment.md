@@ -9,8 +9,9 @@ one `sites` volume. The app ships two scripts for this:
 ## Image
 
 - Include this app and install `restic`, `flock` (util-linux) and Bash.
-- Write the application revision to `/home/frappe/source-commit` at build time
-  (or set `RESTIC_IMAGE_COMMIT_FILE`). Releases and snapshots are recorded against it.
+- Optional: write the application revision (e.g. the git commit) to `/home/frappe/source-commit`
+  at build time, or set `RESTIC_IMAGE_COMMIT_FILE`. Releases and restore receipts record it,
+  so you can tell which image a snapshot came from; without it they record `unknown`.
 
 ## Runtime services
 
@@ -130,4 +131,4 @@ In addition to the [repository settings](../README.md#setup):
 | `RESTIC_CONFIGURE_EXECUTABLE` | | Optional bench configuration script for restores. |
 | `RESTIC_DEPLOYMENT_BACKUP_UPTIME_KUMA_URL` | | Optional deployment push monitor. |
 | `FRAPPE_BENCH_ROOT` | `/home/frappe/frappe-bench` | Bench location. |
-| `RESTIC_IMAGE_COMMIT_FILE` | `/home/frappe/source-commit` | Application revision file. |
+| `RESTIC_IMAGE_COMMIT_FILE` | `/home/frappe/source-commit` | Optional application revision file. |
