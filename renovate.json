@@ -4,6 +4,7 @@
 	"mode": "full",
 	"semanticCommits": "enabled",
 	"schedule": ["before 6am on monday"],
+	"pre-commit": { "enabled": true },
 	"customManagers": [
 		{
 			"customType": "regex",
