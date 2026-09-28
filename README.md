@@ -93,4 +93,4 @@ takes a safety backup of the current site first.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](license.txt)
