@@ -1,13 +1,16 @@
 """Regressions for scheduled backups and durable inventory state."""
 
 import os
+import tempfile
 from datetime import datetime
+from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 import frappe
 
 from frappe_restic.restic_backup import backup_control as control
+from frappe_restic.restic_backup.recovery import read_json, write_json
 
 
 class TestBackupControl(TestCase):
@@ -130,6 +133,28 @@ class TestBackupControl(TestCase):
 		enqueue.assert_not_called()
 		maintenance.assert_not_called()
 		credentials.assert_not_called()
+
+	def test_failures_recorded_while_stopped_are_alerted_once(self) -> None:
+		with tempfile.TemporaryDirectory() as directory:
+			receipts = Path(directory)
+			write_json(receipts / "rolled-back.json", {"status": "Rolled Back", "snapshot": "abc", "error": "migrate failed"})
+			write_json(receipts / "completed.json", {"status": "Completed", "snapshot": "abc"})
+			with (
+				patch.object(control, "_receipt_directory", return_value=receipts),
+				patch.object(control, "_import_deployment_manifests"),
+				patch("frappe.get_all", side_effect=[["deployment-run"], []]) as runs,
+				patch.object(control, "_notify_run") as notify,
+				patch.object(control, "_send_alert", return_value="Sent") as alert,
+				patch("frappe.log_error"),
+			):
+				control.report_operation_outcomes()
+				control.report_operation_outcomes()
+			self.assertEqual(runs.call_args.kwargs["filters"]["notification_status"], ["is", "not set"])
+			notify.assert_called_once_with("deployment-run", succeeded=False)
+			alert.assert_called_once()
+			self.assertIn("returned to its state before the restore", alert.call_args.args[1])
+			self.assertEqual(read_json(receipts / "rolled-back.json")["notification_status"], "Sent")
+			self.assertNotIn("notification_status", read_json(receipts / "completed.json"))
 
 	def test_schedule_checkbox_does_not_disable_retention_for_manual_remote_backups(self) -> None:
 		with (

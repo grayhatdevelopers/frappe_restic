@@ -1,11 +1,13 @@
 """Exercise real recovery sequencing against temporary files and stubbed commands."""
 
 import fcntl
+import gzip
 import json
 import os
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -54,6 +56,7 @@ class TestRecovery(unittest.TestCase):
 		self.commit = "a" * 40
 		self.commands = []
 		self.failure = None
+		self.rollback_failure = False
 		self.manifest_commit = self.commit
 		self.manifest_site = "erp.test"
 		self.environment = patch.dict(os.environ, {
@@ -85,8 +88,28 @@ class TestRecovery(unittest.TestCase):
 				files.mkdir(parents=True)
 				(files / "restored.txt").write_text("original upload")
 			recovery.snapshot_manifest(stage, site=self.manifest_site, commit=self.manifest_commit)
+		if command[:2] == ["bench", "--site"] and "backup" in command:
+			self.write_native_backup(Path(command[command.index("--backup-path") + 1]))
 		if self.failure and self.failure in command:
 			raise RuntimeError("simulated operation failure")
+		if self.rollback_failure and "restore-database" in command and ".frappe-restic-rollback-stage" in command[-1]:
+			raise RuntimeError("simulated rollback failure")
+
+	def write_native_backup(self, directory: Path) -> None:
+		"""Write the set `bench backup --with-files` produces for the current site."""
+		prefix = directory / "20260928_000000-erp_test"
+		with gzip.open(f"{prefix}-database.sql.gz", "wb") as stream:
+			stream.write(b"SELECT 'safety';")
+		shutil.copy(self.site / "site_config.json", f"{prefix}-site_config_backup.json")
+		for kind, suffix in (("public", "files"), ("private", "private-files")):
+			with tarfile.open(f"{prefix}-{suffix}.tar", "w") as archive:
+				archive.add(self.site / kind / "files", arcname=f"erp.test/{kind}/files")
+
+	def receipt(self) -> dict:
+		return recovery.read_json(self.root / "sites/.frappe-recovery/erp.test/restore-test-001.json")
+
+	def database_restores(self) -> list[str]:
+		return [command[-1] for command in self.commands if "restore-database" in command]
 
 	def test_restore_replaces_files_preserves_keys_and_migrates_before_completion(self) -> None:
 		recovery.restore_site(self.root)
@@ -209,26 +232,72 @@ class TestRecovery(unittest.TestCase):
 		recovery.restore_site(self.root)
 		self.assertEqual(recovery.deployed_commit(self.site), self.commit)
 
-	def test_migration_failure_preserves_block_and_does_not_record_new_release(self) -> None:
+	def test_safety_backup_failure_leaves_running_site_untouched(self) -> None:
+		self.failure = "--backup-path"
+		with self.assertRaises(RuntimeError):
+			recovery.restore_site(self.root)
+		self.assertFalse((self.root / "sites/.frappe-recovery-blocked").exists())
+		self.assertEqual(recovery.read_json(self.site / "site_config.json"), {"db_name": "current_db", "db_password": "current-password"})
+		self.assertTrue((self.site / "public/files/newer.txt").exists())
+		self.assertEqual(self.database_restores(), [])
+		self.assertEqual(self.receipt()["status"], "Failed")
+		with self.assertRaisesRegex(ValueError, "already consumed"):
+			recovery.restore_site(self.root)
+
+	def test_failure_after_replacing_data_returns_site_to_safety_backup(self) -> None:
+		original = recovery.read_json(self.site / "site_config.json")
+		self.failure = "migrate"
+		with self.assertRaisesRegex(RuntimeError, "simulated operation failure"):
+			recovery.restore_site(self.root)
+		self.assertFalse((self.root / "sites/.frappe-recovery-blocked").exists())
+		self.assertEqual(recovery.read_json(self.site / "site_config.json"), original)
+		for kind in ("public", "private"):
+			self.assertTrue((self.site / kind / "files" / "newer.txt").is_file())
+			self.assertFalse((self.site / kind / "files" / "restored.txt").exists())
+		self.assertEqual(len(self.database_restores()), 2)
+		self.assertIn(".frappe-restic-rollback-stage", self.database_restores()[1])
+		self.assertEqual(self.receipt()["status"], "Rolled Back")
+		self.assertIn("simulated operation failure", self.receipt()["error"])
+		self.assertEqual(recovery.deployed_commit(self.site), "unknown")
+		with self.assertRaisesRegex(ValueError, "already consumed"):
+			recovery.restore_site(self.root)
+
+	def test_failed_rollback_blocks_startup(self) -> None:
+		self.failure = "migrate"
+		self.rollback_failure = True
+		with self.assertRaisesRegex(RuntimeError, "simulated operation failure"):
+			recovery.restore_site(self.root)
+		self.assertTrue((self.root / "sites/.frappe-recovery-blocked").exists())
+		self.assertEqual(recovery.read_json(self.site / "site_config.json")["maintenance_mode"], 1)
+		self.assertEqual(self.receipt()["status"], "Rollback Failed")
+
+	def test_fresh_volume_failure_blocks_startup_and_does_not_record_release(self) -> None:
+		shutil.rmtree(self.site)
 		self.failure = "migrate"
 		with self.assertRaises(RuntimeError):
 			recovery.restore_site(self.root)
 		self.assertTrue((self.root / "sites/.frappe-recovery-blocked").exists())
 		self.assertEqual(recovery.read_json(self.site / "site_config.json")["maintenance_mode"], 1)
 		self.assertEqual(recovery.deployed_commit(self.site), "unknown")
-		receipt = recovery.read_json(self.root / "sites/.frappe-recovery/erp.test/restore-test-001.json")
-		self.assertEqual(receipt["status"], "Started")
+		self.assertEqual(self.receipt()["status"], "Started")
 		with self.assertRaisesRegex(ValueError, "already consumed"):
 			recovery.restore_site(self.root)
 
-	def test_interrupted_restore_blocks_startup_and_automatic_retry(self) -> None:
+	def test_site_already_blocked_is_not_rolled_back_or_unblocked(self) -> None:
+		recovery.write_json(self.root / "sites/.frappe-recovery-blocked", {"site": "erp.test"})
 		self.failure = "restore-database"
 		with self.assertRaises(RuntimeError):
 			recovery.restore_site(self.root)
 		self.assertTrue((self.root / "sites/.frappe-recovery-blocked").exists())
+		self.assertEqual(len(self.database_restores()), 1)
 		self.assertEqual(recovery.read_json(self.site / "site_config.json")["maintenance_mode"], 1)
-		with self.assertRaisesRegex(ValueError, "already consumed"):
-			recovery.restore_site(self.root)
+
+	def test_emergency_restore_without_safety_backup_blocks_on_failure(self) -> None:
+		self.failure = "restore-database"
+		with self.assertRaises(RuntimeError):
+			recovery.restore_site(self.root, skip_safety_backup=True)
+		self.assertTrue((self.root / "sites/.frappe-recovery-blocked").exists())
+		self.assertEqual(len(self.database_restores()), 1)
 
 	def test_running_application_lock_prevents_any_restore_command(self) -> None:
 		with (self.root / "sites/.frappe-runtime.lock").open("a") as lock:

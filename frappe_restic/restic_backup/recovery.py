@@ -65,15 +65,20 @@ def utc_now() -> str:
 	return datetime.now(timezone.utc).isoformat()
 
 
-def snapshot_manifest(staged: Path, *, site: str, commit: str) -> dict[str, Any]:
-	"""Describe the actual expanded Frappe tar layout, including its site prefix."""
+def file_roots(staged: Path) -> dict[str, str]:
+	"""Locate the expanded Frappe tar layout, including its site prefix."""
 	roots = {}
 	for kind in ("public", "private"):
 		matches = [path for path in (staged / kind).rglob("files") if path.is_dir() and path.parent.name == kind]
 		if len(matches) != 1:
 			raise ValueError(f"Expected exactly one {kind}/files directory in backup")
 		roots[kind] = matches[0].relative_to(staged).as_posix()
-	manifest = {"version": 1, "site": site, "commit": commit, "created_at": utc_now(), "file_roots": roots}
+	return roots
+
+
+def snapshot_manifest(staged: Path, *, site: str, commit: str) -> dict[str, Any]:
+	"""Describe a staged backup so recovery can validate it independently."""
+	manifest = {"version": 1, "site": site, "commit": commit, "created_at": utc_now(), "file_roots": file_roots(staged)}
 	write_json(staged / MANIFEST_FILE, manifest)
 	return manifest
 
@@ -166,6 +171,28 @@ def validate_restored_encryption() -> None:
 		)
 
 
+def replace_site_data(site: str, site_path: Path, content: Path, roots: dict[str, str], config: dict[str, Any]) -> None:
+	"""Replace a stopped site's configuration, database and uploads with an expanded backup."""
+	write_json(site_path / "site_config.json", config)
+	run([sys.executable, "-m", "frappe_restic.restic_backup.recovery", "restore-database", "--site", site, "--database", str(content / "database.sql")])
+	for kind in ("public", "private"):
+		target = site_path / kind / "files"
+		if not target.resolve().is_relative_to(site_path.resolve()) or target.is_symlink():
+			raise ValueError("Refusing unsafe target upload directory")
+		if target.exists():
+			shutil.rmtree(target)
+		shutil.copytree(content / roots[kind], target)
+
+
+def restore_local_backup(site: str, site_path: Path, backup: Path, config: dict[str, Any]) -> None:
+	"""Return a stopped site to a native backup set taken before a destructive operation."""
+	from frappe_restic.restic_backup.restic_transport import discover_backup_set, stable_staging_tree
+
+	with stable_staging_tree(discover_backup_set(backup), site_path / "private" / ".frappe-restic-rollback-stage") as content:
+		replace_site_data(site, site_path, content, file_roots(content), config)
+	run(["bench", "--site", site, "clear-cache"])
+
+
 def recovery_attempt(site: str) -> str:
 	"""Identify the Docker job internally; restarts keep identity, new jobs do not."""
 	return hashlib.sha256(f"{site}:{socket.gethostname()}".encode()).hexdigest()[:24]
@@ -226,16 +253,21 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 			if current.get("db_type", "mariadb") != "mariadb":
 				raise ValueError("Automated recovery currently supports MariaDB only")
 			write_json(receipt, {**identity, "status": "Started", "started_at": utc_now()})
+			rollback = None
+			if current and not skip_safety_backup:
+				safety = site_path / "private" / "deployment-backups" / f"before-restore-{request}"
+				try:
+					safety.mkdir(parents=True, exist_ok=False)
+					(safety / ".keep").touch()
+					run(["bench", "--site", site, "backup", "--with-files", "--ignore-backup-conf", "--backup-path", str(safety)])
+				except Exception as error:
+					write_json(receipt, {**identity, "status": "Failed", "error": str(error)[:500], "failed_at": utc_now()})
+					print("Safety backup failed; the site was not changed.", file=sys.stderr)
+					raise
+				# An already blocked site is not a state worth returning to.
+				rollback = None if blocked.exists() else safety
 			write_json(blocked, {**identity, "request": request})
 			try:
-				if current:
-					current.update(maintenance_mode=1, pause_scheduler=1)
-					write_json(config_path, current)
-					if not skip_safety_backup:
-						safety = site_path / "private" / "deployment-backups" / f"before-restore-{request}"
-						safety.mkdir(parents=True, exist_ok=False)
-						(safety / ".keep").touch()
-						run(["bench", "--site", site, "backup", "--with-files", "--ignore-backup-conf", "--backup-path", str(safety)])
 				config = read_json(content / "site_config.json")
 				# Keep keys/settings from the backup, but never its old server/database connection.
 				for key in ("db_name", "db_password", "db_host", "db_port", "db_socket", "redis_cache", "redis_queue", "redis_socketio", "host_name"):
@@ -249,16 +281,8 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 				if not config.get("db_password"):
 					config["db_password"] = secrets.token_urlsafe(24)
 				config.update(db_type="mariadb", maintenance_mode=1, pause_scheduler=1)
-				write_json(config_path, config)
 				print("Restoring database and replacing uploaded files...", flush=True)
-				run([sys.executable, "-m", "frappe_restic.restic_backup.recovery", "restore-database", "--site", site, "--database", str(content / "database.sql")])
-				for kind in ("public", "private"):
-					target = site_path / kind / "files"
-					if not target.resolve().is_relative_to(site_path.resolve()) or target.is_symlink():
-						raise ValueError("Refusing unsafe target upload directory")
-					if target.exists():
-						shutil.rmtree(target)
-					shutil.copytree(content / manifest["file_roots"][kind], target)
+				replace_site_data(site, site_path, content, manifest["file_roots"], config)
 				configure = os.environ.get("RESTIC_CONFIGURE_EXECUTABLE")
 				if configure:
 					run([configure], env={**os.environ, "RESTIC_RECOVERY_FINALIZING": "1"})
@@ -279,11 +303,31 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 				write_json(receipt, {**identity, "status": "Completed", "completed_at": utc_now()})
 				blocked.unlink()
 				print("Recovery and migration completed.")
+			except Exception as error:
+				if rollback:
+					roll_back_restore(site, site_path, rollback, current, receipt=receipt, identity=identity, error=error, blocked=blocked)
+				raise
 			finally:
 				if blocked.exists() and config_path.exists():
 					config = read_json(config_path)
 					config.update(maintenance_mode=1, pause_scheduler=1)
 					write_json(config_path, config)
+
+
+def roll_back_restore(site: str, site_path: Path, safety: Path, original: dict[str, Any], *, receipt: Path, identity: dict[str, Any], error: Exception, blocked: Path) -> None:
+	"""Return a failed restore to the site's safety backup; startup stays blocked if that fails."""
+	failure = {**identity, "error": str(error)[:500]}
+	print("Restore failed; returning the site to its safety backup...", file=sys.stderr, flush=True)
+	try:
+		restore_local_backup(site, site_path, safety, {**original, "maintenance_mode": 1, "pause_scheduler": 1})
+		write_json(site_path / "site_config.json", original)
+	except Exception:
+		write_json(receipt, {**failure, "status": "Rollback Failed", "failed_at": utc_now()})
+		print("Rollback failed; startup stays blocked until a restore succeeds.", file=sys.stderr)
+		return
+	write_json(receipt, {**failure, "status": "Rolled Back", "rolled_back_at": utc_now()})
+	blocked.unlink()
+	print("The site was returned to its state before the restore.", file=sys.stderr)
 
 
 def main() -> None:

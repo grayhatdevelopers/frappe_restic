@@ -20,7 +20,8 @@ Include the JSON, JS, SCSS, text and shell resources when distributing the sourc
 
 ## Runtime
 
-Open **Restic Backups → Backup Control**, or `/app/restic-backup-control`.
+Open **Restic Backups → Backup Control** (`/app/restic-backup-control` on v15,
+`/desk/restic-backup-control` on v16).
 Only System Manager and the built-in Administrator can access the page, settings,
 history or backup APIs. Backup records are read-only to operators. Mutations use
 authenticated POST endpoints; restore has no web endpoint. Repository credentials
@@ -51,7 +52,7 @@ prunes and checks the repository. Keep separate repository paths per environment
 | `RESTIC_IMAGE_COMMIT_FILE` | Immutable image revision file; default `/home/frappe/source-commit`. |
 | `RESTIC_RESTORE_SNAPSHOT` | Explicit snapshot ID or `latest`, filtered by site and namespace. |
 | `RESTIC_CONFIGURE_EXECUTABLE` | Optional absolute executable to configure the restored bench/assets; receives `RESTIC_RECOVERY_FINALIZING=1`. |
-| `SITE_NAME`, `DB_ROOT_PASSWORD` | Site selection and MariaDB root credential for recovery. |
+| `SITE_NAME`, `DB_ROOT_PASSWORD` | Site selection and MariaDB root credential for recovery and deployment rollback. |
 
 ## Deployment integration
 
@@ -62,12 +63,20 @@ startup after an incomplete restore. Use the same namespace in every container.
 Bake the application revision into `/home/frappe/source-commit` when building.
 
 Stop all runtime services, then run `bash apps/frappe_restic/frappe_restic/bin/migrate-site.sh`
-inside the bench with `SITE_NAME` set. The executable takes an exclusive lock, pauses
-the site, creates a complete safety backup, validates/uploads it, installs this app
-if necessary, migrates, clears caches, records the release and resumes the site.
-Only restart services after it succeeds. Failed deployments pin their backup and
-leave the site paused. Deployment retention keeps the newest ten plus the last
-30 days, excluding `.keep` and `.failed` directories.
+inside the bench with `SITE_NAME` and `DB_ROOT_PASSWORD` set. The executable takes an
+exclusive lock, creates and validates a complete backup, uploads it, pauses the site,
+installs this app if necessary, migrates, clears caches, records the release and
+resumes the site. Only restart services after it succeeds.
+
+- A failed local backup stops the deployment before anything changes.
+- A failed upload does not stop it: the validated local backup protects the migration,
+  is pinned, and the running site emails the failure.
+- A failed migration returns the database and uploads to the backup and keeps the site
+  in maintenance. The data then matches the previous release; deploy that release (or a
+  fix) to resume. If the return itself fails, startup is blocked until a restore succeeds.
+
+Deployment retention keeps the newest ten plus the last 30 days, excluding `.keep`
+and `.failed` directories.
 
 Projects with their own deployment orchestrator can call these executable boundaries:
 
@@ -80,7 +89,8 @@ python -m frappe_restic.retention server --root "$PWD/sites" --site "$SITE_NAME"
 ```
 
 `backup` writes only the backup directory to stdout (logs go to stderr), exits
-nonzero if validation/upload fails, and pins failures. The orchestrator must pin
+nonzero if the local backup or its validation fails, and warns without failing when
+only the upload fails. It pins failures and local-only copies. The orchestrator must pin
 that directory with `.failed` if its subsequent migration fails. These commands
 require stopped services; the complete shell entrypoint enforces that with the lock.
 
@@ -89,10 +99,25 @@ set `SITE_OPERATION=restore`, `SITE_NAME` and `RESTIC_RESTORE_SNAPSHOT`, and run
 same shell entrypoint. Recovery verifies snapshot contents/site, takes an exclusive
 lock and a safety backup, restores SQL and uploads, retains the encryption key,
 installs this app if absent from the restored DB, purges stale jobs, migrates and
-clears caches. A durable receipt prevents replay by the same job. A failed recovery
-keeps the runtime blocked; inspect the receipt before starting a new recovery job.
+clears caches. A durable receipt prevents replay by the same job.
+
+- Failures before the safety backup completes leave the site unchanged.
+- Later failures return the site to its safety backup, clear the block and fail the job.
+- Startup stays blocked only when there is no state to return to: the return failed,
+  the volumes were fresh, the site was already blocked, or `--skip-safety-backup` was used.
+  Inspect the receipt before starting a new recovery job.
+
 Fresh volumes must be configured with database/Redis connections before recovery;
 use `RESTIC_CONFIGURE_EXECUTABLE` when the platform also needs assets/config refreshed.
+
+## Alerts
+
+Set **Notification Recipients** in Restic Backup Settings. Scheduled and manual backup
+failures are emailed when they happen. Deployment upload failures and restores that failed
+or were rolled back are recorded on the sites volume while services are stopped; the site
+emails them within 15 minutes of running again and logs restore failures to Error Log.
+A site left in maintenance or blocked cannot send anything: watch the job's exit status
+and the site itself from outside, and use the Uptime Kuma push URLs for backup freshness.
 
 ## Validation
 

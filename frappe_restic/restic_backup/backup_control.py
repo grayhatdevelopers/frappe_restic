@@ -20,7 +20,7 @@ from frappe.utils.background_jobs import enqueue
 from frappe.utils.backups import BackupGenerator, get_backup_path
 from redis.exceptions import LockError
 
-from frappe_restic.restic_backup.recovery import image_commit, snapshot_manifest
+from frappe_restic.restic_backup.recovery import image_commit, read_json, snapshot_manifest, write_json
 
 from frappe_restic.restic_backup.doctype.restic_backup_settings.restic_backup_settings import (
 	parse_backup_schedule,
@@ -41,6 +41,10 @@ from frappe_restic.restic_backup.restic_transport import (
 SYSTEM_MANAGER_ROLE = "System Manager"
 BACKUP_PAGE = "restic-backup-control"
 CONNECTIONS = 2
+RESTORE_OUTCOMES = {
+	"Failed": "The safety backup failed, so the site was not changed.",
+	"Rolled Back": "The site was returned to its state before the restore.",
+}
 
 
 def sync_backup_defaults() -> None:
@@ -409,33 +413,61 @@ def _fail_run(run_name: str, message: str, *, started: datetime | None = None) -
 	_set_run(run_name, **values)
 
 
+def report_operation_outcomes() -> None:
+	"""Alert once about deployment and restore failures recorded while services were stopped."""
+	_import_deployment_manifests()
+	for run_name in frappe.get_all(
+		"Restic Backup Run",
+		filters={"source": "Deployment", "status": "Failed", "notification_status": ["is", "not set"]},
+		pluck="name",
+	):
+		_notify_run(run_name, succeeded=False)
+	for path in sorted(_receipt_directory().glob("*.json")):
+		receipt = read_json(path)
+		outcome = RESTORE_OUTCOMES.get(receipt.get("status"))
+		if not outcome or receipt.get("notification_status"):
+			continue
+		message = (
+			f"Restore of snapshot {receipt.get('snapshot') or 'unknown'} failed: "
+			f"{receipt.get('error') or 'unknown error'}.<br>{outcome}"
+		)
+		frappe.log_error(title=f"Restic restore failed: {frappe.local.site}", message=message)
+		receipt["notification_status"] = _send_alert(f"FAILED: {frappe.local.site} restore", message)
+		write_json(path, receipt)
+
+
+def _receipt_directory() -> Path:
+	return Path(frappe.get_site_path("..", f".{namespace()}-recovery", frappe.local.site))
+
+
 def _notify_run(run_name: str, *, succeeded: bool) -> None:
 	if frappe.flags.get("restic_backup_test"):
 		_set_run(run_name, notification_status="Not requested")
 		return
+	run = frappe.get_doc("Restic Backup Run", run_name)
+	status = _send_alert(
+		f"{'Succeeded' if succeeded else 'FAILED'}: {frappe.local.site} {(run.source or 'backup').lower()} backup",
+		f"Backup run {run.name} finished with status {run.status}.<br>"
+		f"Local status: {run.local_status or 'unknown'}<br>"
+		f"Off-site status: {run.remote_status or 'unknown'}<br>"
+		f"Snapshot: {run.restic_snapshot_id or 'none'}<br>"
+		f"Details: {run.error_summary or 'none'}",
+		succeeded=succeeded,
+	)
+	_set_run(run_name, notification_status=status)
+
+
+def _send_alert(subject: str, message: str, *, succeeded: bool = False) -> str:
 	settings = frappe.get_single("Restic Backup Settings")
 	recipients = parse_recipients(settings.notification_recipients)
 	if not recipients or (succeeded and not cint(settings.email_on_success)):
-		_set_run(run_name, notification_status="Not requested")
-		return
-	run = frappe.get_doc("Restic Backup Run", run_name)
+		return "Not requested"
 	try:
-		frappe.sendmail(
-			recipients=recipients,
-			subject=f"{'Succeeded' if succeeded else 'FAILED'}: {frappe.local.site} backup",
-			message=(
-				f"Backup run {run.name} finished with status {run.status}.<br>"
-				f"Local status: {run.local_status or 'unknown'}<br>"
-				f"Off-site status: {run.remote_status or 'unknown'}<br>"
-				f"Snapshot: {run.restic_snapshot_id or 'none'}<br>"
-				f"Details: {run.error_summary or 'none'}"
-			),
-			delayed=False,
-		)
-		_set_run(run_name, notification_status="Sent")
-	except Exception:  # noqa: BLE001 - notification failure must not replace backup outcome
+		frappe.sendmail(recipients=recipients, subject=subject, message=message, delayed=False)
+	except Exception:  # noqa: BLE001 - notification failure must not replace the operation outcome
 		frappe.logger("restic_backup").exception("Could not send backup notification")
-		_set_run(run_name, notification_status="Failed")
+		return "Failed"
+	return "Sent"
 
 
 def _push_heartbeat(*, succeeded: bool, message: str) -> None:
