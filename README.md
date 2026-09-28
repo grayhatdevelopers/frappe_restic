@@ -71,9 +71,9 @@ resumes the site. Only restart services after it succeeds.
 - A failed local backup stops the deployment before anything changes.
 - A failed upload does not stop it: the validated local backup protects the migration,
   is pinned, and the running site emails the failure.
-- A failed migration returns the database and uploads to the backup and keeps the site
-  in maintenance. The data then matches the previous release; deploy that release (or a
-  fix) to resume. If the return itself fails, startup is blocked until a restore succeeds.
+- A failed migration returns the site (database, uploads and configuration) to the backup
+  and fails the job, so the new release never starts. Redeploy the previous release to
+  serve the site again. If the return itself fails, startup is blocked until a restore succeeds.
 
 Deployment retention keeps the newest ten plus the last 30 days, excluding `.keep`
 and `.failed` directories.

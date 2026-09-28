@@ -56,11 +56,12 @@ def backup(site: str) -> Path:
 
 
 def deploy(site: str) -> None:
-    """Back up, then migrate; a failed migration returns the data to that backup."""
+    """Back up, then migrate; a failed migration returns the site to that backup."""
     if not os.environ.get("DB_ROOT_PASSWORD"):
         raise ValueError("DB_ROOT_PASSWORD is required to roll back a failed migration")
     path = backup(site)
     site_path = bench_root() / "sites" / site
+    original = read_json(site_path / "site_config.json")
     _set_config(site, maintenance_mode=1, pause_scheduler=1)
     try:
         install(site)
@@ -69,7 +70,7 @@ def deploy(site: str) -> None:
         record_release(site_path)
     except Exception:
         (path / ".failed").touch()
-        _roll_back(site, site_path, path)
+        _roll_back(site, site_path, path, original)
         raise
     _set_config(site, pause_scheduler=0, maintenance_mode=0)
     try:
@@ -78,17 +79,17 @@ def deploy(site: str) -> None:
         print(f"WARNING: deployment succeeded but retention failed: {error}", file=sys.stderr)
 
 
-def _roll_back(site: str, site_path: Path, path: Path) -> None:
-    print("Deployment failed; returning the site's data to its pre-deployment backup.", file=sys.stderr, flush=True)
+def _roll_back(site: str, site_path: Path, path: Path, original: dict) -> None:
+    print("Deployment failed; returning the site to its pre-deployment backup.", file=sys.stderr, flush=True)
     try:
-        restore_local_backup(site, site_path, path, read_json(site_path / "site_config.json"))
+        restore_local_backup(site, site_path, path, original)
     except Exception as error:  # noqa: BLE001 - the migration failure is the error to raise
         write_json(bench_root() / "sites" / f".{namespace()}-recovery-blocked",
                    {"site": site, "reason": "deployment rollback failed", "backup": str(path)})
         print(f"Rollback failed ({error}); startup is blocked until the site is restored.", file=sys.stderr)
         return
-    print("Data returned to the pre-deployment backup; the site stays in maintenance "
-          "until a release deploys successfully.", file=sys.stderr)
+    print("Site returned to its pre-deployment state; redeploy the previous release to serve it.",
+          file=sys.stderr)
 
 
 def _set_config(site: str, **values: int) -> None:

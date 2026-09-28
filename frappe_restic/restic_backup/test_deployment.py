@@ -114,13 +114,12 @@ class TestDeploy(unittest.TestCase):
         self.assertTrue((self.site / f".{namespace()}-deployed-release.json").exists())
         self.restore.assert_not_called()
 
-    def test_migration_failure_returns_data_to_backup_and_stays_paused(self) -> None:
+    def test_migration_failure_returns_site_to_backup_as_it_was(self) -> None:
         self.failure = "migrate"
         with self.assertRaises(subprocess.CalledProcessError):
             deployment.deploy("site.test")
-        self.restore.assert_called_once()
-        self.assertEqual(self.restore.call_args.args[:3], ("site.test", self.site, self.backup_path))
-        self.assertNotIn(["set-config", "-p", "maintenance_mode", "0"], self.commands)
+        # The original configuration, without the deployment's maintenance flags.
+        self.restore.assert_called_once_with("site.test", self.site, self.backup_path, {"db_name": "db"})
         self.assertTrue((self.backup_path / ".failed").exists())
         self.assertFalse((self.root / "sites" / f".{namespace()}-recovery-blocked").exists())
         self.assertFalse((self.site / f".{namespace()}-deployed-release.json").exists())
