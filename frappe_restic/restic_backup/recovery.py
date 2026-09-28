@@ -240,14 +240,15 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 				# Keep keys/settings from the backup, but never its old server/database connection.
 				for key in ("db_name", "db_password", "db_host", "db_port", "db_socket", "redis_cache", "redis_queue", "redis_socketio", "host_name"):
 					config.pop(key, None)
-				for key in ("db_name", "db_password", "host_name"):
+				# A site-specific connection survives; otherwise common_site_config supplies it.
+				for key in ("db_name", "db_password", "db_host", "db_port", "db_socket", "host_name"):
 					if key in current:
 						config[key] = current[key]
 				if not config.get("db_name"):
 					config["db_name"] = "_" + hashlib.sha256(site.encode()).hexdigest()[:16]
 				if not config.get("db_password"):
 					config["db_password"] = secrets.token_urlsafe(24)
-				config.update(db_type="mariadb", db_host="db", db_port=3306, maintenance_mode=1, pause_scheduler=1)
+				config.update(db_type="mariadb", maintenance_mode=1, pause_scheduler=1)
 				write_json(config_path, config)
 				print("Restoring database and replacing uploaded files...", flush=True)
 				run([sys.executable, "-m", "frappe_restic.restic_backup.recovery", "restore-database", "--site", site, "--database", str(content / "database.sql")])

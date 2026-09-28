@@ -94,7 +94,9 @@ class TestRecovery(unittest.TestCase):
 		self.assertEqual(config["encryption_key"], "original-key")
 		self.assertEqual(config["db_name"], "current_db")
 		self.assertEqual(config["db_password"], "current-password")
-		self.assertEqual(config["db_host"], "db")
+		# Connection comes from common_site_config, never from the backup or a hard-coded host.
+		self.assertNotIn("db_host", config)
+		self.assertNotIn("db_port", config)
 		self.assertEqual(config["maintenance_mode"], 0)
 		for kind in ("public", "private"):
 			self.assertFalse((self.site / kind / "files" / "newer.txt").exists())
@@ -108,6 +110,16 @@ class TestRecovery(unittest.TestCase):
 		self.assertTrue(any("purge-jobs" in command for command in self.commands))
 		self.assertEqual(recovery.deployed_commit(self.site), self.commit)
 		self.assertFalse((self.root / "sites/.frappe-recovery-blocked").exists())
+
+	def test_site_specific_database_connection_is_preserved(self) -> None:
+		recovery.write_json(self.site / "site_config.json", {
+			"db_name": "current_db", "db_password": "current-password",
+			"db_host": "mariadb.internal", "db_port": 3307,
+		})
+		recovery.restore_site(self.root)
+		config = recovery.read_json(self.site / "site_config.json")
+		self.assertEqual(config["db_host"], "mariadb.internal")
+		self.assertEqual(config["db_port"], 3307)
 
 	def test_completed_request_does_not_restore_twice(self) -> None:
 		recovery.restore_site(self.root)
