@@ -1,5 +1,4 @@
 frappe.pages["restic-backup-control"].on_page_load = function (wrapper) {
-	frappe.breadcrumbs.add("Setup");
 	const page = frappe.ui.make_app_page({
 		parent: wrapper,
 		title: __("Backup Control"),
@@ -9,6 +8,12 @@ frappe.pages["restic-backup-control"].on_page_load = function (wrapper) {
 	page.add_inner_button(__("Backup Runs"), () => frappe.set_route("List", "Restic Backup Run"));
 	const backupControl = new ResticBackupControl(page, wrapper);
 	page.add_inner_button(__("Settings"), () => backupControl.openSettings());
+};
+
+// Frappe v16 picks the sidebar for a page from the module of the last doctype opened, so opening
+// this page from another app's screen keeps that app's sidebar. Pick again from this page's route.
+frappe.pages["restic-backup-control"].on_page_show = function () {
+	frappe.app.sidebar?.set_workspace_sidebar?.();
 };
 
 class ResticBackupControl {
