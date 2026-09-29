@@ -65,11 +65,6 @@
 			listview.page.add_inner_button(__("Backup Control"), () =>
 				frappe.set_route("restic-backup-control")
 			);
-			frappe.breadcrumbs.add({
-				type: "Custom",
-				route: frappe.router.make_url(["restic-backup-control"]),
-				label: __("Backup Control"),
-			});
 		},
 		formatters: {
 			// Frappe inserts subject text with textContent, not HTML.

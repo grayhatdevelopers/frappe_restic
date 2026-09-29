@@ -74,7 +74,7 @@ encrypted Frappe archives cannot be validated before upload.
 
 ## Usage
 
-Open **Restic Backups → Backup Control** (`/app/restic-backup-control` on v15,
+Open **Restic Backup → Backup Control** (`/app/restic-backup-control` on v15,
 `/desk/restic-backup-control` on v16). From there you can run a backup, check off-site
 snapshots and change settings. Only System Managers can access the page, the settings,
 the history and the backup APIs; there is no restore endpoint on the web.
