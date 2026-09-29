@@ -3,7 +3,12 @@
 # Needs only docker and bash on the host.
 #
 #   FRAPPE_IMAGE=frappe/erpnext:v16.36.0 tests/drill/run.sh
+#   FROM_IMAGE=frappe/erpnext:v15.121.3 FROM_DB_IMAGE=mariadb:10.6 \
+#       FRAPPE_IMAGE=frappe/erpnext:v16.36.0 tests/drill/run.sh
 #
+# FROM_IMAGE and FROM_DB_IMAGE start the source on an older release and MariaDB, without
+# this app, as a server being upgraded is. The first deployment then upgrades it in place,
+# and the target restores that older site's snapshot onto the new release.
 # Source project: deployments succeed, survive an upload failure, and roll back a failed
 # migration. Target project (fresh volumes): a failed restore blocks startup, restores
 # are not replayed, an explicit older snapshot restores, a failed restore of a working
@@ -22,6 +27,8 @@ grep -q '^RESTIC_REPOSITORY=.*/frappe-restic-ci-local$' ../../.env.test \
 stamp="$(date +%s)"
 export FRAPPE_IMAGE="${FRAPPE_IMAGE:?FRAPPE_IMAGE is required}"
 export DRILL_IMAGE="frt-drill-app:${stamp}"
+FROM_IMAGE="${FROM_IMAGE:-}"
+FROM_DB_IMAGE="${FROM_DB_IMAGE:-}"
 export SITE_NAME="drill-${stamp}.localhost"
 source_project="frt-drill-src-${stamp}"
 target_project="frt-drill-dst-${stamp}"
@@ -30,6 +37,8 @@ out="$(mktemp -d)"
 cleanup() {
     if [[ "${KEEP:-0}" == 1 ]]; then
         echo "Kept ${source_project}, ${target_project}, ${DRILL_IMAGE} and the snapshots of ${SITE_NAME}."
+        echo "Full operation output: ${out}/operations.log"
+        return
     else
         docker run --rm --env-file ../../.env.test --entrypoint bash "$DRILL_IMAGE" -c \
             "restic snapshots --json --tag frappe-site:${SITE_NAME} | jq -r '.[].id' | xargs -r restic forget --prune --quiet" \
@@ -59,6 +68,7 @@ operation() {
     local result=0
     compose "$project" --profile ops run --rm -T "$@" site-operation > "$out/op" 2>&1 || result=$?
     tail -n 8 "$out/op" | sed 's/^/    | /'
+    cat "$out/op" >> "$out/operations.log"
     return "$result"
 }
 
@@ -81,12 +91,18 @@ step "Build ${DRILL_IMAGE} from ${FRAPPE_IMAGE}"
 docker build -q -f Containerfile --build-arg FRAPPE_IMAGE -t "$DRILL_IMAGE" ../.. >/dev/null
 pass "image built with frappe_restic baked in"
 
-step "Source: new site with records, uploads and an encrypted secret"
-compose "$source_project" up -d --wait
+step "Source: new site with records, uploads and an encrypted secret on ${FROM_IMAGE:-$FRAPPE_IMAGE}"
+DRILL_IMAGE="${FROM_IMAGE:-$DRILL_IMAGE}" DB_IMAGE="${FROM_DB_IMAGE:-mariadb:11.8}" \
+    compose "$source_project" up -d --wait
 tools "$source_project" bash /drill/configure.sh
 tools "$source_project" bench new-site --mariadb-user-host-login-scope='%' \
     --admin-password admin --db-root-password frappe-restic-drill "$SITE_NAME" >/dev/null
 tools "$source_project" env/bin/python /drill/probe.py seed
+if [[ -n "$FROM_IMAGE$FROM_DB_IMAGE" ]]; then
+    # The new release and MariaDB take over the same volumes.
+    compose "$source_project" up -d --wait
+    tools "$source_project" bash /drill/configure.sh
+fi
 pass "seeded"
 
 step "Source: a deployment is refused while the application runs"

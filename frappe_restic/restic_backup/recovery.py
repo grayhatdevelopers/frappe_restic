@@ -141,6 +141,32 @@ def latest_snapshot(site: str) -> str:
 	return snapshot
 
 
+def check_database_root(sites: Path, site: str) -> None:
+	"""Fail before anything changes when DB_ROOT_PASSWORD does not open the database server."""
+	try:  # Frappe v16
+		import MySQLdb as driver
+	except ImportError:  # Frappe v15
+		import pymysql as driver
+
+	config = {}
+	for path in (sites / "common_site_config.json", sites / site / "site_config.json"):
+		if path.exists():
+			config.update(read_json(path))
+	connection = {"user": "root", "password": os.environ["DB_ROOT_PASSWORD"], "connect_timeout": 10}
+	if config.get("db_socket"):
+		connection["unix_socket"] = config["db_socket"]
+	else:
+		connection["host"] = config.get("db_host") or "localhost"
+		connection["port"] = int(config.get("db_port") or 3306)
+	try:
+		driver.connect(**connection).close()
+	except driver.OperationalError as error:
+		raise ValueError(
+			f"DB_ROOT_PASSWORD does not open the database server ({error.args[0]}); "
+			"it must match the password the database volume was created with"
+		) from None
+
+
 def restore_database(site: str, database: str) -> None:
 	"""Use Frappe's restore installer with grants usable by every Compose container."""
 	import frappe
@@ -273,6 +299,7 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 			raise ValueError(
 				"Restore request already consumed or interrupted; inspect its receipt before starting a new restore deployment"
 			)
+		check_database_root(sites, site)
 		identity["snapshot_selector"] = snapshot
 		if snapshot == "latest":
 			snapshot = latest_snapshot(site)
@@ -366,8 +393,10 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 				# Never replay jobs queued against the pre-restore database.
 				run(["bench", "purge-jobs", "--site", site])
 				print("Migrating restored database to the deployed application...", flush=True)
-				run([sys.executable, "-m", "frappe_restic.deployment", "install", "--site", site])
+				# Migrate loads the module map before clearing caches; a previous release's map breaks it.
+				run(["bench", "--site", site, "execute", "frappe.cache_manager.clear_global_cache"])
 				run(["bench", "--site", site, "migrate"])
+				run([sys.executable, "-m", "frappe_restic.deployment", "install", "--site", site])
 				run(["bench", "--site", site, "execute", "frappe.cache_manager.clear_global_cache"])
 				run(["bench", "--site", site, "clear-cache"])
 				run(["bench", "--site", site, "clear-website-cache"])
