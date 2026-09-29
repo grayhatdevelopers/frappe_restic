@@ -1,3 +1,12 @@
+// Frappe themes its own .frappe-card, but Bootstrap's .card stays white in dark mode.
+.restic-backup-control,
+.restic-backup-settings-dialog {
+	.card {
+		border-color: var(--border-color);
+		background-color: var(--card-bg);
+	}
+}
+
 .restic-backup-settings-dialog {
 	.modal-dialog {
 		max-width: 880px;
@@ -35,15 +44,6 @@
 
 	.restic-backup-day {
 		min-width: 2.9rem;
-		border-color: var(--gray-300);
-		background: var(--control-bg);
-		color: var(--text-color);
-
-		&.is-selected {
-			border-color: var(--primary-color);
-			background: var(--primary-color);
-			color: var(--fg-color);
-		}
 	}
 
 	.restic-backup-schedule-time {

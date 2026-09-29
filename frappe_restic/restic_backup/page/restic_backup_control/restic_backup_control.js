@@ -234,7 +234,7 @@ class ResticBackupControl {
 						.map((day) => {
 							const selected = entry.days.includes(day);
 							return `<button type="button"
-						class="btn btn-sm restic-backup-day${selected ? " is-selected" : ""}"
+						class="btn btn-sm ${selected ? "btn-primary" : "btn-default"} restic-backup-day"
 						data-index="${index}"
 						data-day="${day}"
 						aria-pressed="${selected}">${__(day.slice(0, 3))}</button>`;
