@@ -296,9 +296,13 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 			):
 				print("This restore already completed; database and files were not touched.")
 				return
-			raise ValueError(
-				"Restore request already consumed or interrupted; inspect its receipt before starting a new restore deployment"
-			)
+			if previous.get("status") == "Completed":
+				raise ValueError(
+					"Restore request already completed differently; inspect its receipt before starting a new restore deployment"
+				)
+			# A failed or interrupted attempt never finished the restore, so the same request retries it.
+			identity["attempt"] = previous.get("attempt", 1) + 1
+			print(f"Retrying a restore whose last attempt ended {previous.get('status')}.", flush=True)
 		check_database_root(sites, site)
 		identity["snapshot_selector"] = snapshot
 		if snapshot == "latest":
@@ -325,7 +329,8 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 			write_json(receipt, {**identity, "status": "Started", "started_at": utc_now()})
 			rollback = None
 			if current and not skip_safety_backup:
-				safety = site_path / "private" / "deployment-backups" / f"before-restore-{request}"
+				attempt = identity.get("attempt", 1)
+				safety = site_path / "private" / "deployment-backups" / f"before-restore-{request}-{attempt}"
 				try:
 					safety.mkdir(parents=True, exist_ok=False)
 					(safety / ".keep").touch()
