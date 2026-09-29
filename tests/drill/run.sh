@@ -163,10 +163,11 @@ fi
 grep -q 'incomplete recovery blocks startup' "$out/op"
 pass "nothing to return to: startup blocked, runtime guard refused"
 
-step "Target: the interrupted request is not replayed"
-OP_HOSTNAME=restore-a expect_failure "$target_project" -e SITE_OPERATION=restore -e RESTIC_RESTORE_SNAPSHOT=latest
-grep -q 'already consumed or interrupted' "$out/op"
-pass "refused"
+step "Target: redeploying the failed request retries it"
+OP_HOSTNAME=restore-a operation "$target_project" -e SITE_OPERATION=restore -e RESTIC_RESTORE_SNAPSHOT=latest
+grep -q 'Retrying a restore whose last attempt ended Started' "$out/op"
+tools "$target_project" test ! -e sites/.frappe-recovery-blocked
+pass "retried and unblocked"
 
 step "Target: a new job restores the older snapshot it names"
 OP_HOSTNAME=restore-b operation "$target_project" -e SITE_OPERATION=restore -e "RESTIC_RESTORE_SNAPSHOT=${old_snapshot}"
