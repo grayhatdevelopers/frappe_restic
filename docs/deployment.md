@@ -78,8 +78,8 @@ clears stale jobs, migrates, installs this app if the snapshot lacks it and clea
 caches.
 
 Each request is recorded in a receipt under `sites/.<namespace>-recovery/<site>/`, keyed
-by the job's hostname. Re-running a completed request does nothing; re-running an
-interrupted one is refused. Start a new job (new hostname) to try again.
+by the job's hostname. Re-running a completed request does nothing; re-running one that
+failed or was interrupted tries it again.
 
 If something fails:
 
@@ -89,7 +89,7 @@ If something fails:
 - **Later:** the site is returned to its safety backup and the job fails.
 - **No state to return to** (fresh volumes, the return failed, the site was already
   blocked, or the emergency `--skip-safety-backup` console option was used): startup stays blocked by
-  `sites/.<namespace>-recovery-blocked`. Inspect the receipt, then run a new restore.
+  `sites/.<namespace>-recovery-blocked`. Inspect the receipt, then run the restore again.
 
 Fresh volumes need database and Redis connections in `common_site_config.json` before
 restoring (run your configurator job first). If the bench needs more setup after the

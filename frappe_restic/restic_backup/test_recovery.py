@@ -198,6 +198,16 @@ class TestRecovery(unittest.TestCase):
 		recovery.restore_site(self.root)
 		self.assertEqual(self.commands, [])
 
+	def test_completed_request_for_another_snapshot_is_refused(self) -> None:
+		recovery.restore_site(self.root)
+		self.commands.clear()
+		with (
+			patch.dict(os.environ, {"RESTIC_RESTORE_SNAPSHOT": "c" * 64}),
+			self.assertRaisesRegex(ValueError, "already completed differently"),
+		):
+			recovery.restore_site(self.root)
+		self.assertEqual(self.commands, [])
+
 	def test_new_restore_job_can_restore_again_without_operator_identifier(self) -> None:
 		recovery.restore_site(self.root)
 		self.commands.clear()
@@ -330,8 +340,10 @@ class TestRecovery(unittest.TestCase):
 		self.assertTrue((self.site / "public/files/newer.txt").exists())
 		self.assertEqual(self.database_restores(), [])
 		self.assertEqual(self.receipt()["status"], "Failed")
-		with self.assertRaisesRegex(ValueError, "already consumed"):
-			recovery.restore_site(self.root)
+		self.failure = None
+		recovery.restore_site(self.root)
+		self.assertEqual(self.receipt()["status"], "Completed")
+		self.assertEqual(self.receipt()["attempt"], 2)
 
 	def test_failure_after_replacing_data_returns_site_to_safety_backup(self) -> None:
 		original = recovery.read_json(self.site / "site_config.json")
@@ -348,8 +360,10 @@ class TestRecovery(unittest.TestCase):
 		self.assertEqual(self.receipt()["status"], "Rolled Back")
 		self.assertIn("simulated operation failure", self.receipt()["error"])
 		self.assertEqual(recovery.deployed_commit(self.site), "unknown")
-		with self.assertRaisesRegex(ValueError, "already consumed"):
-			recovery.restore_site(self.root)
+		self.failure = None
+		recovery.restore_site(self.root)
+		self.assertEqual(self.receipt()["status"], "Completed")
+		self.assertTrue((self.site / "public/files/restored.txt").is_file())
 
 	def test_failed_rollback_blocks_startup(self) -> None:
 		self.failure = "migrate"
@@ -369,8 +383,11 @@ class TestRecovery(unittest.TestCase):
 		self.assertEqual(recovery.read_json(self.site / "site_config.json")["maintenance_mode"], 1)
 		self.assertEqual(recovery.deployed_commit(self.site), "unknown")
 		self.assertEqual(self.receipt()["status"], "Started")
-		with self.assertRaisesRegex(ValueError, "already consumed"):
-			recovery.restore_site(self.root)
+		self.failure = None
+		recovery.restore_site(self.root)
+		self.assertFalse((self.root / "sites/.frappe-recovery-blocked").exists())
+		self.assertEqual(recovery.read_json(self.site / "site_config.json")["maintenance_mode"], 0)
+		self.assertEqual(self.receipt()["status"], "Completed")
 
 	def test_site_already_blocked_is_not_rolled_back_or_unblocked(self) -> None:
 		recovery.write_json(self.root / "sites/.frappe-recovery-blocked", {"site": "erp.test"})
