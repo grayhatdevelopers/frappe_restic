@@ -17,7 +17,7 @@ from frappe_restic.retention import prune
 
 
 def install(site: str) -> None:
-	"""Install after the deployment safety backup, before migration."""
+	"""Install after migration: an older release's schema cannot take an app install."""
 	result = subprocess.run(
 		["bench", "--site", site, "list-apps"], check=True, capture_output=True, text=True
 	)
@@ -79,8 +79,13 @@ def deploy(site: str) -> None:
 	original = read_json(site_path / "site_config.json")
 	_set_config(site, maintenance_mode=1, pause_scheduler=1)
 	try:
+		# Migrate loads the module map before clearing caches; a previous release's map breaks it.
+		subprocess.run(
+			["bench", "--site", site, "execute", "frappe.cache_manager.clear_global_cache"], check=True
+		)
+		subprocess.run(["bench", "--site", site, "migrate"], check=True)
 		install(site)
-		for command in ("migrate", "clear-cache", "clear-website-cache"):
+		for command in ("clear-cache", "clear-website-cache"):
 			subprocess.run(["bench", "--site", site, command], check=True)
 		record_release(site_path)
 	except Exception:

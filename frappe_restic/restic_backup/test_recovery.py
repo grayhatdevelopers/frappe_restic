@@ -16,6 +16,9 @@ from unittest.mock import Mock, patch
 
 from frappe_restic.restic_backup import recovery
 
+# Restore tests patch the database check out; its own test needs the real one.
+check_database_root = recovery.check_database_root
+
 
 class TestRestoredEncryption(unittest.TestCase):
 	def test_missing_key_is_allowed_only_without_encrypted_secrets(self) -> None:
@@ -87,6 +90,9 @@ class TestRecovery(unittest.TestCase):
 		self.runner = patch.object(recovery, "run", side_effect=self.run_command)
 		self.runner.start()
 		self.addCleanup(self.runner.stop)
+		self.database_root = patch.object(recovery, "check_database_root")
+		self.database_root.start()
+		self.addCleanup(self.database_root.stop)
 
 	def run_command(self, command: list[str], **kwargs) -> None:
 		self.commands.append(command)
@@ -152,9 +158,20 @@ class TestRecovery(unittest.TestCase):
 			self.assertTrue((self.site / kind / "files" / "restored.txt").is_file())
 		migrated = self.commands.index(["bench", "--site", "erp.test", "migrate"])
 		purged = self.commands.index(["bench", "purge-jobs", "--site", "erp.test"])
+		installed = self.commands.index(
+			[sys.executable, "-m", "frappe_restic.deployment", "install", "--site", "erp.test"]
+		)
 		cleared = self.commands.index(["bench", "--site", "erp.test", "clear-cache"])
 		self.assertLess(purged, migrated)
-		self.assertLess(migrated, cleared)
+		# A previous release's cached module map breaks migrate.
+		stale_cache = self.commands.index(
+			["bench", "--site", "erp.test", "execute", "frappe.cache_manager.clear_global_cache"]
+		)
+		self.assertLess(purged, stale_cache)
+		self.assertLess(stale_cache, migrated)
+		# An older release's schema cannot take an app install before it is migrated.
+		self.assertLess(migrated, installed)
+		self.assertLess(installed, cleared)
 		self.assertTrue(any("backup" in command for command in self.commands))
 		self.assertTrue(any("purge-jobs" in command for command in self.commands))
 		self.assertEqual(recovery.deployed_commit(self.site), self.commit)
@@ -221,6 +238,37 @@ class TestRecovery(unittest.TestCase):
 			recovery.restore_site(self.root)
 		self.assertEqual(self.commands, [])
 		self.assertTrue((self.site / "public/files/newer.txt").exists())
+
+	def test_wrong_database_root_password_touches_nothing_and_can_be_retried(self) -> None:
+		with (
+			patch.object(recovery, "check_database_root", side_effect=ValueError("DB_ROOT_PASSWORD")),
+			self.assertRaisesRegex(ValueError, "DB_ROOT_PASSWORD"),
+		):
+			recovery.restore_site(self.root)
+		self.assertEqual(self.commands, [])
+		self.assertFalse((self.root / "sites/.frappe-recovery-blocked").exists())
+		self.assertFalse((self.root / "sites/.frappe-recovery/erp.test/restore-test-001.json").exists())
+		recovery.restore_site(self.root)
+		self.assertEqual(self.receipt()["status"], "Completed")
+
+	def test_database_root_check_uses_site_connection_and_hides_password(self) -> None:
+		try:
+			import MySQLdb as driver
+		except ImportError:
+			import pymysql as driver
+
+		recovery.write_json(self.root / "sites/common_site_config.json", {"db_host": "db", "db_port": 3307})
+		denied = driver.OperationalError(1045, "Access denied for user 'root'")
+		with (
+			patch.object(driver, "connect", side_effect=denied) as connect,
+			self.assertRaises(ValueError) as raised,
+		):
+			check_database_root(self.root / "sites", "erp.test")
+		self.assertEqual(connect.call_args.kwargs["host"], "db")
+		self.assertEqual(connect.call_args.kwargs["port"], 3307)
+		self.assertEqual(connect.call_args.kwargs["user"], "root")
+		self.assertIn("1045", str(raised.exception))
+		self.assertNotIn("unused-test-password", str(raised.exception))
 
 	def test_latest_selection_is_by_time_and_scoped_to_site(self) -> None:
 		entries = [
