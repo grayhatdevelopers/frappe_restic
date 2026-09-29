@@ -74,7 +74,7 @@ services and run the same job with:
 
 The restore verifies the snapshot belongs to the site, takes a safety backup of the
 current site, restores the database and uploads, keeps the site's encryption key,
-installs this app if the snapshot lacks it, clears stale jobs, migrates and clears
+clears stale jobs, migrates, installs this app if the snapshot lacks it and clears
 caches.
 
 Each request is recorded in a receipt under `sites/.<namespace>-recovery/<site>/`, keyed
@@ -83,6 +83,8 @@ interrupted one is refused. Start a new job (new hostname) to try again.
 
 If something fails:
 
+- **`DB_ROOT_PASSWORD` does not open the database server:** refused before anything
+  changes; fix the password and redeploy the same request.
 - **Before the safety backup completes:** the site is unchanged.
 - **Later:** the site is returned to its safety backup and the job fails.
 - **No state to return to** (fresh volumes, the return failed, the site was already
@@ -108,8 +110,8 @@ stopped and the lock held:
 
 ```bash
 python -m frappe_restic.deployment backup --site "$SITE_NAME"
+# Run the project's migration here; install after it, then clear caches.
 python -m frappe_restic.deployment install --site "$SITE_NAME"
-# Run the project's migration and cache clearing here.
 python -m frappe_restic.restic_backup.recovery record-release --site "$SITE_NAME"
 python -m frappe_restic.retention server --root "$PWD/sites" --site "$SITE_NAME" --days 30
 ```
