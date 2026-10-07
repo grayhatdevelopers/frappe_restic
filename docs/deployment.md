@@ -99,8 +99,9 @@ absolute path; it runs before the migration with `RESTIC_RECOVERY_FINALIZING=1`.
 ## Alerts while services are stopped
 
 Deployment upload failures and failed or rolled-back restores happen while the site is
-down, so they are recorded on the sites volume. The running site emails them within
-15 minutes and logs restore failures to Error Log. A site that stays in maintenance or
+down, so they are recorded on the sites volume. The running site emails them and shows
+them in every System Manager's notification bell within 15 minutes, and logs restore
+failures to Error Log. A site that stays in maintenance or
 blocked cannot send anything: watch the job's exit status and the site from outside.
 
 ## Custom orchestration

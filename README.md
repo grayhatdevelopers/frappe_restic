@@ -18,7 +18,8 @@ ERPNext is not required.
   one place, restricted to System Managers.
 - **Retention:** local backup sets and off-site snapshots are pruned automatically; the
   repository is checked weekly.
-- **Alerts:** failure emails, optional success emails and Uptime Kuma push monitors.
+- **Alerts:** failures in every System Manager's notification bell, failure emails, optional
+  success emails and Uptime Kuma push monitors.
 - **Safe deployments and restores for containers:** back up before every migration,
   return to that backup if the migration fails, and restore a site from a snapshot into
   new or existing volumes. See [Deployment](docs/deployment.md).
@@ -67,7 +68,8 @@ Then open **Restic Backup Settings**:
 - **Enable Scheduled Backups** and add schedule rows.
 - **Local Backup Sets** (default 4) are kept on the server after a successful upload.
 - **Remote Retention (Days)** (default 14) keeps snapshots in that window, and always the newest.
-- **Notification Recipients** receive failures; enable **Email on Success** to also get successes.
+- **Notification Recipients** are emailed failures; enable **Email on Success** to also get
+  successes. Every System Manager sees failures in the notification bell regardless.
 
 Leave Frappe's own backup encryption disabled: Restic encrypts the off-site copy, and
 encrypted Frappe archives cannot be validated before upload.
