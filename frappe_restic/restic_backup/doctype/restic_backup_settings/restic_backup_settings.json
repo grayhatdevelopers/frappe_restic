@@ -6,7 +6,10 @@
  "field_order": [
   "enabled",
   "schedule_section",
+  "schedule_editor",
   "backup_schedule",
+  "storage_section",
+  "offsite_configuration",
   "retention_section",
   "local_backup_limit",
   "retention_column",
@@ -28,11 +31,24 @@
    "label": "Schedule"
   },
   {
+   "fieldname": "schedule_editor",
+   "fieldtype": "HTML"
+  },
+  {
    "fieldname": "backup_schedule",
    "fieldtype": "Table",
+   "hidden": 1,
    "label": "Schedule",
-   "options": "Restic Backup Schedule Entry",
-   "reqd": 1
+   "options": "Restic Backup Schedule Entry"
+  },
+  {
+   "fieldname": "storage_section",
+   "fieldtype": "Section Break",
+   "label": "Off-site Storage"
+  },
+  {
+   "fieldname": "offsite_configuration",
+   "fieldtype": "HTML"
   },
   {
    "fieldname": "retention_section",
@@ -41,7 +57,7 @@
   },
   {
    "default": "4",
-   "description": "Complete default-path backup sets retained locally after successful off-site upload.",
+   "description": "Complete backup sets kept on this server.",
    "fieldname": "local_backup_limit",
    "fieldtype": "Int",
    "label": "Local Backup Sets",
@@ -53,10 +69,10 @@
   },
   {
    "default": "14",
-   "description": "Restic keeps snapshots within this window and always keeps the newest snapshot.",
+   "description": "The newest off-site snapshot is always retained.",
    "fieldname": "remote_keep_days",
    "fieldtype": "Int",
-   "label": "Remote Retention (Days)",
+   "label": "Off-site Retention (Days)",
    "reqd": 1
   },
   {
@@ -74,7 +90,7 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-10-07 19:00:00.000000",
+ "modified": "2026-10-07 20:00:00.000000",
  "modified_by": "Administrator",
  "module": "Restic Backup",
  "name": "Restic Backup Settings",

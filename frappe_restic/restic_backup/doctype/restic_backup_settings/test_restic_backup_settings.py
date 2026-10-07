@@ -16,25 +16,31 @@ from frappe_restic.restic_backup.doctype.restic_backup_settings.restic_backup_se
 	parse_backup_schedule,
 )
 from frappe_restic.restic_backup.page.restic_backup_control.restic_backup_control import (
-	save_settings,
+	get_configuration,
 )
 
 
 class TestResticBackupSettings(FrappeTestCase):
-	def test_settings_use_compact_schedule_editor_instead_of_frappe_grid(self) -> None:
+	def test_settings_form_edits_the_schedule_with_day_pills_instead_of_the_grid(self) -> None:
 		app_path = Path(frappe.get_app_path("frappe_restic"))
-		page_script = (
-			app_path / "restic_backup" / "page" / "restic_backup_control" / "restic_backup_control.js"
+		module_path = app_path / "restic_backup"
+		form_script = (
+			module_path / "doctype" / "restic_backup_settings" / "restic_backup_settings.js"
 		).read_text(encoding="utf-8")
+		page_script = (module_path / "page" / "restic_backup_control" / "restic_backup_control.js").read_text(
+			encoding="utf-8"
+		)
 		stylesheet = (app_path / "public" / "scss" / "restic_backups.bundle.scss").read_text(encoding="utf-8")
+		meta = frappe.get_meta("Restic Backup Settings")
 
-		self.assertNotIn('fieldtype: "Table"', page_script)
-		self.assertNotIn('fieldtype: "MultiSelectPills"', page_script)
-		self.assertIn("renderScheduleEditor", page_script)
-		self.assertIn("setScheduleEditorVisibility", page_script)
-		self.assertIn("Boolean(Number(values.enabled))", page_script)
-		self.assertIn('<details class="card restic-backup-offsite">', page_script)
-		self.assertIn("restic-backup-day", page_script)
+		self.assertTrue(meta.get_field("backup_schedule").hidden)
+		self.assertEqual("HTML", meta.get_field("schedule_editor").fieldtype)
+		self.assertEqual("HTML", meta.get_field("offsite_configuration").fieldtype)
+		self.assertIn("restic-backup-day", form_script)
+		self.assertIn('<details class="card restic-backup-offsite">', form_script)
+		self.assertIn('frappe.set_route("Form", "Restic Backup Settings")', page_script)
+		self.assertNotIn("openSettings", page_script)
+		self.assertIn(".restic-backup-settings {", stylesheet)
 		self.assertIn("restic-backup-offsite-summary", stylesheet)
 		self.assertIn("restic-backup-schedule-row", stylesheet)
 		self.assertIn("overflow-wrap: anywhere", stylesheet)
@@ -79,51 +85,37 @@ class TestResticBackupSettings(FrappeTestCase):
 		with patch("frappe.get_roles", return_value=["System Manager"]):
 			_require_system_manager()
 
-	def test_system_manager_can_save_settings_from_backup_control(self) -> None:
-		values = {
-			"enabled": 1,
-			"backup_schedule": [
-				{
-					"days": [
-						"Monday",
-						"Tuesday",
-						"Wednesday",
-						"Thursday",
-						"Friday",
-						"Saturday",
-					],
-					"backup_time": "12:30:00",
-				},
-				{"days": ["Sunday"], "backup_time": "02:00:00"},
-			],
-			"local_backup_limit": 5,
-			"remote_keep_days": 21,
-			"email_on_success": 1,
-		}
-
-		with patch("frappe.get_roles", return_value=["System Manager"]):
-			result = save_settings(values)
-
-		self.assertEqual(
-			result["schedule"],
+	def test_saving_settings_sorts_the_schedule_by_time(self) -> None:
+		workdays = "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday"
+		settings = frappe.get_single("Restic Backup Settings")
+		settings.update(
+			{"enabled": 1, "local_backup_limit": 5, "remote_keep_days": 21, "email_on_success": 1}
+		)
+		settings.set(
+			"backup_schedule",
 			[
-				{"days": ["Sunday"], "backup_time": "02:00:00"},
-				{
-					"days": [
-						"Monday",
-						"Tuesday",
-						"Wednesday",
-						"Thursday",
-						"Friday",
-						"Saturday",
-					],
-					"backup_time": "12:30:00",
-				},
+				{"days": workdays, "backup_time": "12:30"},
+				{"days": "Sunday", "backup_time": "02:00:00"},
 			],
 		)
-		self.assertEqual(result["local_backup_limit"], 5)
-		self.assertEqual(result["remote_keep_days"], 21)
-		self.assertEqual(result["email_on_success"], 1)
+		settings.save()
+
+		self.assertEqual(
+			[(row.days, str(row.backup_time)) for row in settings.backup_schedule],
+			[("Sunday", "02:00:00"), (workdays, "12:30:00")],
+		)
+		self.assertEqual(5, frappe.db.get_single_value("System Settings", "backup_limit"))
+
+	def test_only_system_managers_can_read_the_storage_configuration(self) -> None:
+		with patch("frappe.get_roles", return_value=["Sales User"]):
+			with self.assertRaises(frappe.PermissionError):
+				get_configuration()
+		with patch("frappe.get_roles", return_value=["System Manager"]):
+			configuration = get_configuration()
+		self.assertIn("RESTIC_REPOSITORY", [row["name"] for row in configuration["required_variables"]])
+		self.assertTrue(
+			all(set(row) == {"name", "configured"} for row in configuration["required_variables"])
+		)
 
 	def test_schedule_rejects_duplicate_day_and_time(self) -> None:
 		rows = [
