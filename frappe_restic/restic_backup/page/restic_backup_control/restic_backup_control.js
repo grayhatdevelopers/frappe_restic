@@ -6,14 +6,18 @@ frappe.pages["restic-backup-control"].on_page_load = function (wrapper) {
 	});
 	page.add_inner_button(__("Native Backups"), () => frappe.set_route("backups"));
 	page.add_inner_button(__("Backup Runs"), () => frappe.set_route("List", "Restic Backup Run"));
-	const backupControl = new ResticBackupControl(page, wrapper);
-	page.add_inner_button(__("Settings"), () => backupControl.openSettings());
+	page.add_inner_button(__("Settings"), () =>
+		frappe.set_route("Form", "Restic Backup Settings")
+	);
+	wrapper.backup_control = new ResticBackupControl(page, wrapper);
 };
 
 // Frappe v16 picks the sidebar for a page from the module of the last doctype opened, so opening
 // this page from another app's screen keeps that app's sidebar. Pick again from this page's route.
-frappe.pages["restic-backup-control"].on_page_show = function () {
+frappe.pages["restic-backup-control"].on_page_show = function (wrapper) {
 	frappe.app.sidebar?.set_workspace_sidebar?.();
+	// Settings are edited on their own form, so reload what this page shows of them on return.
+	wrapper.backup_control?.refresh();
 };
 
 class ResticBackupControl {
@@ -31,7 +35,6 @@ class ResticBackupControl {
 		this.$main.on("click", ".restic-backup-details", (event) => {
 			this.showDetails(this.data.items[Number(event.currentTarget.dataset.index)]);
 		});
-		this.refresh();
 	}
 
 	async refresh() {
@@ -103,274 +106,6 @@ class ResticBackupControl {
 				</div>
 			</div>
 		`);
-	}
-
-	async openSettings() {
-		if (!this.data) await this.refresh();
-		const settings = this.data.settings;
-		const weekdays = [
-			"Monday",
-			"Tuesday",
-			"Wednesday",
-			"Thursday",
-			"Friday",
-			"Saturday",
-			"Sunday",
-		];
-		const schedule = settings.schedule.map((entry) => ({
-			...entry,
-			days: [...entry.days],
-		}));
-		const dialog = new frappe.ui.Dialog({
-			title: __("Backup Settings"),
-			size: "large",
-			fields: [
-				{ fieldtype: "Section Break", label: __("Schedule") },
-				{
-					fieldtype: "Check",
-					fieldname: "enabled",
-					label: __("Enable scheduled backups"),
-					default: settings.enabled,
-					description: __(
-						"Manual backups remain available when the schedule is disabled."
-					),
-				},
-				{
-					fieldtype: "HTML",
-					options: `<p class="text-muted">${
-						this.data.configuration.offsite_enabled
-							? __("Off-site uploads are enabled by deployment configuration.")
-							: __(
-									"Off-site uploads are disabled by deployment configuration. Scheduled and manual backups stay local."
-							  )
-					}</p>`,
-				},
-				{
-					fieldtype: "HTML",
-					fieldname: "backup_schedule",
-				},
-				{ fieldtype: "Section Break", label: __("Off-site storage") },
-				{
-					fieldtype: "HTML",
-					fieldname: "offsite_configuration",
-					options: this.offsiteConfigurationHtml(this.data.configuration),
-				},
-				{ fieldtype: "Section Break", label: __("Retention") },
-				{
-					fieldtype: "Int",
-					fieldname: "local_backup_limit",
-					label: __("Local backup sets"),
-					reqd: true,
-					default: settings.local_backup_limit,
-					description: __("Complete backup sets kept on this server."),
-				},
-				{ fieldtype: "Column Break" },
-				{
-					fieldtype: "Int",
-					fieldname: "remote_keep_days",
-					label: __("Off-site retention (days)"),
-					reqd: true,
-					default: settings.remote_keep_days,
-					description: __("The newest off-site snapshot is always retained."),
-				},
-				{ fieldtype: "Section Break", label: __("Email notifications") },
-				{
-					fieldtype: "Check",
-					fieldname: "email_on_success",
-					label: __("Email successful runs"),
-					default: settings.email_on_success,
-					description: __(
-						"System Managers are always told about failures, in the notification bell and by email."
-					),
-				},
-			],
-			primary_action_label: __("Save"),
-			primary_action: async (values) => {
-				const enabled = Boolean(Number(values.enabled));
-				if (enabled && !this.validateSchedule(schedule)) return;
-				const primaryButton = dialog.get_primary_btn();
-				primaryButton.prop("disabled", true);
-				try {
-					this.data.settings = await frappe.xcall(
-						"frappe_restic.restic_backup.page.restic_backup_control.restic_backup_control.save_settings",
-						{
-							values: {
-								...values,
-								backup_schedule: enabled ? schedule : settings.schedule,
-							},
-						}
-					);
-					dialog.hide();
-					this.render();
-					frappe.show_alert({
-						message: __("Backup settings saved"),
-						indicator: "green",
-					});
-				} finally {
-					primaryButton.prop("disabled", false);
-				}
-			},
-		});
-		dialog.show();
-		dialog.$wrapper.addClass("restic-backup-settings-dialog");
-		dialog.fields_dict.enabled.$input.on("change.resticBackupSchedule", () => {
-			this.setScheduleEditorVisibility(dialog);
-		});
-		this.renderScheduleEditor(dialog.fields_dict.backup_schedule.$wrapper, schedule, weekdays);
-		this.setScheduleEditorVisibility(dialog);
-	}
-
-	setScheduleEditorVisibility(dialog) {
-		const enabled = Boolean(Number(dialog.get_value("enabled")));
-		dialog.fields_dict.backup_schedule.$wrapper.toggle(enabled);
-	}
-
-	renderScheduleEditor($wrapper, schedule, weekdays) {
-		const render = () => {
-			const rows = schedule
-				.map((entry, index) => {
-					const dayButtons = weekdays
-						.map((day) => {
-							const selected = entry.days.includes(day);
-							return `<button type="button"
-						class="btn btn-sm ${selected ? "btn-primary" : "btn-default"} restic-backup-day"
-						data-index="${index}"
-						data-day="${day}"
-						aria-pressed="${selected}">${__(day.slice(0, 3))}</button>`;
-						})
-						.join("");
-					return `<div class="restic-backup-schedule-row" data-index="${index}">
-					<div class="restic-backup-schedule-days">
-						<div class="restic-backup-field-label">${__("Days")}</div>
-						<div class="restic-backup-day-list">${dayButtons}</div>
-					</div>
-					<label class="restic-backup-schedule-time">
-						<span class="restic-backup-field-label">${__("Time")}</span>
-						<input type="time" class="form-control" data-index="${index}"
-							value="${frappe.utils.escape_html(entry.backup_time || "")}">
-					</label>
-					<button type="button" class="btn btn-link text-danger restic-backup-remove"
-						data-index="${index}" aria-label="${__("Remove schedule")}">${__("Remove")}</button>
-				</div>`;
-				})
-				.join("");
-
-			$wrapper.html(`<div class="restic-backup-schedule-editor">
-				<p class="text-muted small mb-0">${__(
-					"Each row runs once at the selected time on every selected day."
-				)}</p>
-				${rows || `<div class="text-muted restic-backup-empty">${__("No schedule rows yet.")}</div>`}
-				<button type="button" class="btn btn-default btn-sm restic-backup-add">
-					${__("Add schedule")}
-				</button>
-			</div>`);
-		};
-
-		$wrapper.off(".resticBackupSchedule");
-		$wrapper.on("click.resticBackupSchedule", ".restic-backup-day", (event) => {
-			const button = event.currentTarget;
-			const index = Number(button.dataset.index);
-			const day = button.dataset.day;
-			const selectedDays = schedule[index].days;
-			if (selectedDays.includes(day)) {
-				schedule[index].days = selectedDays.filter((value) => value !== day);
-			} else {
-				schedule[index].days = weekdays.filter(
-					(value) => selectedDays.includes(value) || value === day
-				);
-			}
-			render();
-		});
-		$wrapper.on("change.resticBackupSchedule", 'input[type="time"]', (event) => {
-			const index = Number(event.currentTarget.dataset.index);
-			schedule[index].backup_time = event.currentTarget.value;
-		});
-		$wrapper.on("click.resticBackupSchedule", ".restic-backup-remove", (event) => {
-			schedule.splice(Number(event.currentTarget.dataset.index), 1);
-			render();
-		});
-		$wrapper.on("click.resticBackupSchedule", ".restic-backup-add", () => {
-			schedule.push({ days: [], backup_time: "" });
-			render();
-		});
-		render();
-	}
-
-	validateSchedule(schedule) {
-		if (!schedule.length) {
-			frappe.msgprint(__("Add at least one backup schedule."));
-			return false;
-		}
-		const invalidIndex = schedule.findIndex(
-			(entry) => !entry.days.length || !entry.backup_time
-		);
-		if (invalidIndex !== -1) {
-			frappe.msgprint(
-				__("Choose at least one day and a time in schedule row {0}.", [invalidIndex + 1])
-			);
-			return false;
-		}
-		const scheduledSlots = new Map();
-		for (const [index, entry] of schedule.entries()) {
-			for (const day of entry.days) {
-				const slot = `${day}|${entry.backup_time}`;
-				if (scheduledSlots.has(slot)) {
-					frappe.msgprint(
-						__("Schedule rows {0} and {1} both include {2} at {3}.", [
-							scheduledSlots.get(slot),
-							index + 1,
-							__(day),
-							entry.backup_time,
-						])
-					);
-					return false;
-				}
-				scheduledSlots.set(slot, index + 1);
-			}
-		}
-		return true;
-	}
-
-	offsiteConfigurationHtml(configuration) {
-		const statusRows = configuration.required_variables
-			.map((variable) => {
-				const indicator = variable.configured ? "green" : "red";
-				const status = variable.configured ? __("Configured") : __("Missing");
-				return `<div class="restic-backup-env-row">
-				<code>${frappe.utils.escape_html(variable.name)}</code>
-				<span class="indicator-pill ${indicator}">${status}</span>
-			</div>`;
-			})
-			.join("");
-		const deploymentStatus = configuration.offsite_enabled
-			? `<span class="indicator-pill green">${__("Enabled")}</span>`
-			: `<span class="indicator-pill orange">${__("Disabled")}</span>`;
-		const storageStatus = configuration.restic_ready
-			? `<span class="indicator-pill green">${__("Configured")}</span>`
-			: `<span class="indicator-pill red">${__("Credentials missing")}</span>`;
-		return `<details class="card restic-backup-offsite">
-			<summary class="restic-backup-offsite-summary">
-				<strong>${__("Storage configuration")}</strong>
-				${storageStatus}
-			</summary>
-			<div class="card-body border-top">
-			<p class="mb-1">${__(
-				"Set these in the deployment environment, not in Frappe, then restart or redeploy."
-			)}</p>
-			<p class="text-muted small mb-3">${__(
-				"Coolify: application Environment Variables. Docker Compose: the .env file supplied to Compose."
-			)}</p>
-			${statusRows}
-			<div class="restic-backup-env-row pt-3">
-				<span><code>RESTIC_OFFSITE_BACKUP_ENABLED</code> <span class="text-muted">(${__(
-					"all backup uploads"
-				)})</span></span>
-				${deploymentStatus}
-			</div>
-			<p class="text-muted small mt-3 mb-0">${__(
-				"RESTIC_REPOSITORY format: s3:https://s3.<region>.backblazeb2.com/<bucket>/restic. Use a bucket-restricted Backblaze application key."
-			)}</p>
-		</div></details>`;
 	}
 
 	card(title, value, indicator) {

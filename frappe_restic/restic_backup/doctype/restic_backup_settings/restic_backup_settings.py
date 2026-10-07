@@ -47,7 +47,7 @@ class ResticBackupSettings(Document):
 		if not 1 <= cint(self.local_backup_limit) <= 30:
 			frappe.throw(_("Local Backup Sets must be between 1 and 30."))
 		if not 1 <= cint(self.remote_keep_days) <= 3650:
-			frappe.throw(_("Remote Retention must be between 1 and 3650 days."))
+			frappe.throw(_("Off-site Retention must be between 1 and 3650 days."))
 
 		frappe.db.set_single_value("System Settings", "backup_limit", cint(self.local_backup_limit))
 

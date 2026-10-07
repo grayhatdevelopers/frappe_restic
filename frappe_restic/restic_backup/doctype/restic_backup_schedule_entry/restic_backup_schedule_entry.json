@@ -10,7 +10,7 @@
  ],
  "fields": [
   {
-   "description": "Comma-separated weekdays. Backup Control presents these as selectable day pills.",
+   "description": "Comma-separated weekdays. Backup Settings presents these as selectable day pills.",
    "fieldname": "days",
    "fieldtype": "Data",
    "in_list_view": 1,
