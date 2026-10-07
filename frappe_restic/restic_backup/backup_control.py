@@ -17,7 +17,6 @@ from frappe.desk.doctype.notification_log.notification_log import enqueue_create
 from frappe.utils import cint, get_time, now_datetime
 from frappe.utils.background_jobs import enqueue
 from frappe.utils.backups import BackupGenerator, get_backup_path
-from frappe.utils.user import get_users_with_role
 from redis.exceptions import LockError
 
 from frappe_restic.config import namespace
