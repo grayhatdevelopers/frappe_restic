@@ -98,7 +98,6 @@ class TestResticBackupSettings(FrappeTestCase):
 			],
 			"local_backup_limit": 5,
 			"remote_keep_days": 21,
-			"notification_recipients": "ops@example.com",
 			"email_on_success": 1,
 		}
 
@@ -124,7 +123,6 @@ class TestResticBackupSettings(FrappeTestCase):
 		)
 		self.assertEqual(result["local_backup_limit"], 5)
 		self.assertEqual(result["remote_keep_days"], 21)
-		self.assertEqual(result["notification_recipients"], "ops@example.com")
 		self.assertEqual(result["email_on_success"], 1)
 
 	def test_schedule_rejects_duplicate_day_and_time(self) -> None:

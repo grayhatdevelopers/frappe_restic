@@ -152,7 +152,6 @@ class TestBackupControl(TestCase):
 				patch("frappe.get_all", side_effect=[["deployment-run"], []]) as runs,
 				patch.object(control, "_notify_run") as notify,
 				patch.object(control, "_send_alert", return_value="Sent") as alert,
-				patch.object(control, "_notify_system_managers") as desk,
 				patch("frappe.log_error"),
 			):
 				control.report_operation_outcomes()
@@ -160,48 +159,64 @@ class TestBackupControl(TestCase):
 			self.assertEqual(runs.call_args.kwargs["filters"]["notification_status"], ["is", "not set"])
 			notify.assert_called_once_with("deployment-run", succeeded=False)
 			alert.assert_called_once()
-			desk.assert_called_once_with(*alert.call_args.args)
 			self.assertIn("returned to its state before the restore", alert.call_args.args[1])
 			self.assertEqual(read_json(receipts / "rolled-back.json")["notification_status"], "Sent")
 			self.assertNotIn("notification_status", read_json(receipts / "completed.json"))
 
-	def test_failed_run_reaches_every_system_manager_in_the_desk(self) -> None:
-		run = frappe._dict(name="run123", source="Scheduled", status="Failed", error_summary="disk full")
+	def _alert(self, *, succeeded: bool, email_on_success: int = 0, desk=None, email=None):
+		managers = [
+			frappe._dict(name="Administrator", email="admin@example.com"),
+			frappe._dict(name="ops@example.com", email="ops@example.com"),
+		]
 		with (
-			patch("frappe.get_doc", return_value=run),
-			patch("frappe.get_all", return_value=["admin@example.com", "ops@example.com"]) as users,
+			patch.object(control, "_settings_int", return_value=email_on_success),
 			patch.object(control, "get_users_with_role", return_value=["Administrator", "ops@example.com"]),
-			patch.object(control, "enqueue_create_notification") as notify,
-			patch.object(control, "_send_alert", return_value="Not requested"),
-			patch.object(control, "_set_run") as set_run,
+			patch("frappe.get_all", return_value=managers),
+			patch("frappe.logger"),
+			patch.object(control, "enqueue_create_notification", side_effect=desk) as notify,
+			patch("frappe.sendmail", side_effect=email) as sendmail,
 		):
-			control._notify_run("run123", succeeded=False)
-			control._notify_run("run123", succeeded=True)
-		self.assertEqual(users.call_args.kwargs["filters"], {"name": ["in", ["Administrator", "ops@example.com"]]})
-		notify.assert_called_once()
+			status = control._send_alert(
+				"FAILED: backup", "disk full", succeeded=succeeded, run_name="run123"
+			)
+		return status, notify, sendmail
+
+	def test_failure_reaches_every_system_manager_in_the_desk_and_by_email(self) -> None:
+		status, notify, sendmail = self._alert(succeeded=False)
+		self.assertEqual(status, "Sent")
 		recipients, notification = notify.call_args.args
 		self.assertEqual(recipients, ["admin@example.com", "ops@example.com"])
-		self.assertEqual(notification["type"], "Alert")
-		self.assertIn("FAILED", notification["subject"])
-		self.assertIn("disk full", notification["email_content"])
 		self.assertEqual(
-			(notification["document_type"], notification["document_name"]),
-			("Restic Backup Run", "run123"),
+			notification,
+			{
+				"type": "Alert",
+				"subject": "FAILED: backup",
+				"email_content": "disk full",
+				"document_type": "Restic Backup Run",
+				"document_name": "run123",
+			},
 		)
-		set_run.assert_called_with("run123", notification_status="Not requested")
+		self.assertEqual(sendmail.call_args.kwargs["recipients"], ["ops@example.com"])
 
-	def test_desk_notification_failure_does_not_block_the_email(self) -> None:
-		run = frappe._dict(name="run123", source="Manual", status="Failed")
-		with (
-			patch("frappe.get_doc", return_value=run),
-			patch.object(control, "get_users_with_role", side_effect=RuntimeError("database gone")),
-			patch("frappe.logger"),
-			patch.object(control, "_send_alert", return_value="Sent") as alert,
-			patch.object(control, "_set_run") as set_run,
-		):
-			control._notify_run("run123", succeeded=False)
-		alert.assert_called_once()
-		set_run.assert_called_once_with("run123", notification_status="Sent")
+	def test_success_is_emailed_only_on_request_and_never_shown_in_the_desk(self) -> None:
+		status, notify, sendmail = self._alert(succeeded=True)
+		self.assertEqual(status, "Not requested")
+		notify.assert_not_called()
+		sendmail.assert_not_called()
+
+		status, notify, sendmail = self._alert(succeeded=True, email_on_success=1)
+		self.assertEqual(status, "Sent")
+		notify.assert_not_called()
+		self.assertEqual(sendmail.call_args.kwargs["recipients"], ["ops@example.com"])
+
+	def test_one_failing_channel_does_not_block_the_other(self) -> None:
+		status, _notify, sendmail = self._alert(succeeded=False, desk=RuntimeError("queue down"))
+		self.assertEqual(status, "Sent")
+		sendmail.assert_called_once()
+
+		status, notify, _sendmail = self._alert(succeeded=False, email=RuntimeError("no mailbox"))
+		self.assertEqual(status, "Failed")
+		notify.assert_called_once()
 
 	def test_schedule_checkbox_does_not_disable_retention_for_manual_remote_backups(self) -> None:
 		with (

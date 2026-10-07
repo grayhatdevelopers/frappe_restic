@@ -23,7 +23,6 @@ from redis.exceptions import LockError
 from frappe_restic.config import namespace
 from frappe_restic.restic_backup.doctype.restic_backup_settings.restic_backup_settings import (
 	parse_backup_schedule,
-	parse_recipients,
 )
 from frappe_restic.restic_backup.recovery import image_commit, read_json, snapshot_manifest, write_json
 from frappe_restic.restic_backup.restic_transport import (
@@ -445,9 +444,7 @@ def report_operation_outcomes() -> None:
 			f"{receipt.get('error') or 'unknown error'}.<br>{outcome}"
 		)
 		frappe.log_error(title=f"Restic restore failed: {frappe.local.site}", message=message)
-		subject = f"FAILED: {frappe.local.site} restore"
-		_notify_system_managers(subject, message)
-		receipt["notification_status"] = _send_alert(subject, message)
+		receipt["notification_status"] = _send_alert(f"FAILED: {frappe.local.site} restore", message)
 		write_json(path, receipt)
 
 
@@ -460,43 +457,39 @@ def _notify_run(run_name: str, *, succeeded: bool) -> None:
 		_set_run(run_name, notification_status="Not requested")
 		return
 	run = frappe.get_doc("Restic Backup Run", run_name)
-	subject = (
-		f"{'Succeeded' if succeeded else 'FAILED'}: {frappe.local.site} {(run.source or 'backup').lower()} backup"
-	)
-	message = (
+	status = _send_alert(
+		f"{'Succeeded' if succeeded else 'FAILED'}: {frappe.local.site} {(run.source or 'backup').lower()} backup",
 		f"Backup run {run.name} finished with status {run.status}.<br>"
 		f"Local status: {run.local_status or 'unknown'}<br>"
 		f"Off-site status: {run.remote_status or 'unknown'}<br>"
 		f"Snapshot: {run.restic_snapshot_id or 'none'}<br>"
-		f"Details: {run.error_summary or 'none'}"
+		f"Details: {run.error_summary or 'none'}",
+		succeeded=succeeded,
+		run_name=run.name,
 	)
-	if not succeeded:
-		_notify_system_managers(subject, message, run_name=run.name)
-	status = _send_alert(subject, message, succeeded=succeeded)
 	_set_run(run_name, notification_status=status)
 
 
-def _notify_system_managers(subject: str, message: str, *, run_name: str | None = None) -> None:
-	"""Show a failure in every System Manager's notification bell."""
-	notification = {"type": "Alert", "subject": subject, "email_content": message}
-	if run_name:
-		notification.update(document_type="Restic Backup Run", document_name=run_name)
+def _send_alert(subject: str, message: str, *, succeeded: bool = False, run_name: str | None = None) -> str:
+	"""Tell every System Manager: failures in the desk and by email, successes by email on request."""
+	if succeeded and not _settings_int("email_on_success", 0):
+		return "Not requested"
 	try:
-		# Notification Log addresses users by email, which differs from the name for Administrator.
-		recipients = frappe.get_all(
+		managers = frappe.get_all(
 			"User",
 			filters={"name": ["in", get_users_with_role(SYSTEM_MANAGER_ROLE)]},
-			pluck="email",
+			fields=["name", "email"],
 		)
-		enqueue_create_notification(recipients, notification)
 	except Exception:  # notification failure must not replace the operation outcome
-		frappe.logger("restic_backup").exception("Could not create backup notification")
-
-
-def _send_alert(subject: str, message: str, *, succeeded: bool = False) -> str:
-	settings = frappe.get_single("Restic Backup Settings")
-	recipients = parse_recipients(settings.notification_recipients)
-	if not recipients or (succeeded and not cint(settings.email_on_success)):
+		frappe.logger("restic_backup").exception("Could not find the System Managers to notify")
+		return "Failed"
+	if not succeeded:
+		_notify_desk([manager.email for manager in managers], subject, message, run_name)
+	# Administrator's address is a placeholder unless someone signs in with it as their own user.
+	recipients = [
+		manager.email for manager in managers if manager.email and manager.name not in frappe.STANDARD_USERS
+	]
+	if not recipients:
 		return "Not requested"
 	try:
 		frappe.sendmail(recipients=recipients, subject=subject, message=message, delayed=False)
@@ -504,6 +497,17 @@ def _send_alert(subject: str, message: str, *, succeeded: bool = False) -> str:
 		frappe.logger("restic_backup").exception("Could not send backup notification")
 		return "Failed"
 	return "Sent"
+
+
+def _notify_desk(recipients: list[str], subject: str, message: str, run_name: str | None) -> None:
+	"""Show a failure in the notification bell. An Alert never sends an email of its own."""
+	notification = {"type": "Alert", "subject": subject, "email_content": message}
+	if run_name:
+		notification.update(document_type="Restic Backup Run", document_name=run_name)
+	try:
+		enqueue_create_notification(recipients, notification)
+	except Exception:  # notification failure must not replace the operation outcome
+		frappe.logger("restic_backup").exception("Could not create backup notification")
 
 
 def _push_heartbeat(*, succeeded: bool, message: str) -> None:
