@@ -17,7 +17,6 @@ from frappe.desk.doctype.notification_log.notification_log import enqueue_create
 from frappe.utils import cint, get_time, now_datetime
 from frappe.utils.background_jobs import enqueue
 from frappe.utils.backups import BackupGenerator, get_backup_path
-from frappe.utils.user import get_users_with_role
 from redis.exceptions import LockError
 
 from frappe_restic.config import namespace
@@ -475,10 +474,12 @@ def _send_alert(subject: str, message: str, *, succeeded: bool = False, run_name
 	if succeeded and not _settings_int("email_on_success", 0):
 		return "Not requested"
 	try:
+		# Frappe's own role lookups leave out Administrator, the only manager on a small site.
+		names = frappe.get_all(
+			"Has Role", filters={"role": SYSTEM_MANAGER_ROLE, "parenttype": "User"}, pluck="parent"
+		)
 		managers = frappe.get_all(
-			"User",
-			filters={"name": ["in", get_users_with_role(SYSTEM_MANAGER_ROLE)]},
-			fields=["name", "email"],
+			"User", filters={"name": ["in", names], "enabled": 1}, fields=["name", "email"]
 		)
 	except Exception:  # notification failure must not replace the operation outcome
 		frappe.logger("restic_backup").exception("Could not find the System Managers to notify")
