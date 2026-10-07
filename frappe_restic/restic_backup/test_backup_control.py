@@ -170,14 +170,18 @@ class TestBackupControl(TestCase):
 		]
 		with (
 			patch.object(control, "_settings_int", return_value=email_on_success),
-			patch.object(control, "get_users_with_role", return_value=["Administrator", "ops@example.com"]),
-			patch("frappe.get_all", return_value=managers),
+			patch("frappe.get_all", side_effect=[["Administrator", "ops@example.com"], managers]) as get_all,
 			patch("frappe.logger"),
 			patch.object(control, "enqueue_create_notification", side_effect=desk) as notify,
 			patch("frappe.sendmail", side_effect=email) as sendmail,
 		):
 			status = control._send_alert(
 				"FAILED: backup", "disk full", succeeded=succeeded, run_name="run123"
+			)
+		if get_all.call_count:
+			self.assertEqual(
+				get_all.call_args.kwargs["filters"],
+				{"name": ["in", ["Administrator", "ops@example.com"]], "enabled": 1},
 			)
 		return status, notify, sendmail
 
