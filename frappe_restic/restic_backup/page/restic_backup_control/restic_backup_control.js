@@ -175,19 +175,13 @@ class ResticBackupControl {
 				},
 				{ fieldtype: "Section Break", label: __("Email notifications") },
 				{
-					fieldtype: "Data",
-					fieldname: "notification_recipients",
-					label: __("Recipients"),
-					default: settings.notification_recipients,
-					description: __("Separate multiple email addresses with commas."),
-				},
-				{ fieldtype: "Column Break" },
-				{
 					fieldtype: "Check",
 					fieldname: "email_on_success",
 					label: __("Email successful runs"),
 					default: settings.email_on_success,
-					description: __("Failure notifications are always sent."),
+					description: __(
+						"System Managers are always told about failures, in the notification bell and by email."
+					),
 				},
 			],
 			primary_action_label: __("Save"),

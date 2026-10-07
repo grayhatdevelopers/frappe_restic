@@ -29,7 +29,6 @@ EDITABLE_SETTING_FIELDS = {
 	"backup_schedule",
 	"local_backup_limit",
 	"remote_keep_days",
-	"notification_recipients",
 	"email_on_success",
 }
 
@@ -210,7 +209,6 @@ def _settings_payload(settings) -> dict[str, Any]:
 		],
 		"local_backup_limit": cint(settings.local_backup_limit) or 4,
 		"remote_keep_days": cint(settings.remote_keep_days) or 14,
-		"notification_recipients": settings.notification_recipients or "",
 		"email_on_success": cint(settings.email_on_success),
 	}
 

@@ -12,8 +12,6 @@
   "retention_column",
   "remote_keep_days",
   "notification_section",
-  "notification_recipients",
-  "notification_column",
   "email_on_success"
  ],
  "fields": [
@@ -67,17 +65,8 @@
    "label": "Notifications"
   },
   {
-   "description": "Comma-separated email addresses. Failures are always sent; successes are optional.",
-   "fieldname": "notification_recipients",
-   "fieldtype": "Data",
-   "label": "Notification Recipients"
-  },
-  {
-   "fieldname": "notification_column",
-   "fieldtype": "Column Break"
-  },
-  {
    "default": "0",
+   "description": "System Managers are always told about failures, in the notification bell and by email.",
    "fieldname": "email_on_success",
    "fieldtype": "Check",
    "label": "Email on Success"
@@ -85,7 +74,7 @@
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-09-16 15:50:00.000000",
+ "modified": "2026-10-07 19:00:00.000000",
  "modified_by": "Administrator",
  "module": "Restic Backup",
  "name": "Restic Backup Settings",
