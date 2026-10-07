@@ -14,11 +14,12 @@ ERPNext is not required.
 - **Encrypted off-site snapshots:** Restic encrypts and deduplicates; credentials stay in
   environment variables and are never shown in the desk.
 - **Schedules:** pick weekdays and times in the site's timezone, or run a backup by hand.
-- **Backup Control page:** backup history, off-site snapshot state, settings and actions in
+- **Backup Control page:** backup history, off-site snapshot state and actions in
   one place, restricted to System Managers.
 - **Retention:** local backup sets and off-site snapshots are pruned automatically; the
   repository is checked weekly.
-- **Alerts:** failure emails, optional success emails and Uptime Kuma push monitors.
+- **Alerts:** every System Manager is told about failures in the notification bell and by
+  email; optional success emails and Uptime Kuma push monitors.
 - **Safe deployments and restores for containers:** back up before every migration,
   return to that backup if the migration fails, and restore a site from a snapshot into
   new or existing volumes. See [Deployment](docs/deployment.md).
@@ -62,12 +63,13 @@ server and the background workers):
 Use a separate repository path per environment. The repository is initialised on the
 first upload.
 
-Then open **Restic Backup Settings**:
+Then open **Restic Backup → Backup Settings**:
 
 - **Enable Scheduled Backups** and add schedule rows.
 - **Local Backup Sets** (default 4) are kept on the server after a successful upload.
-- **Remote Retention (Days)** (default 14) keeps snapshots in that window, and always the newest.
-- **Notification Recipients** receive failures; enable **Email on Success** to also get successes.
+- **Off-site Retention (Days)** (default 14) keeps snapshots in that window, and always the newest.
+- **Email on Success** also emails System Managers about successful runs. They are always
+  told about failures, in the notification bell and by email.
 
 Leave Frappe's own backup encryption disabled: Restic encrypts the off-site copy, and
 encrypted Frappe archives cannot be validated before upload.

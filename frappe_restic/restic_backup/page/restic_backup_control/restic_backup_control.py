@@ -15,23 +15,11 @@ from frappe.utils import cint
 from frappe.utils.backups import get_backup_path
 
 from frappe_restic.restic_backup.backup_control import _require_system_manager
-from frappe_restic.restic_backup.doctype.restic_backup_settings.restic_backup_settings import (
-	parse_working_days,
-)
 from frappe_restic.restic_backup.restic_transport import (
 	REQUIRED_RESTIC_ENV,
 	_run,
 	restic_is_configured,
 )
-
-EDITABLE_SETTING_FIELDS = {
-	"enabled",
-	"backup_schedule",
-	"local_backup_limit",
-	"remote_keep_days",
-	"notification_recipients",
-	"email_on_success",
-}
 
 
 @frappe.whitelist()
@@ -94,15 +82,8 @@ def get_dashboard(page: int = 1) -> dict[str, Any]:
 	items = _backup_inventory(runs, _native_backups(), _deployment_backups())
 	page = min(max(1, cint(page)), max(1, (len(items) + 9) // 10))
 	return {
-		"settings": _settings_payload(settings),
-		"configuration": {
-			"restic_ready": restic_is_configured(),
-			"required_variables": [
-				{"name": name, "configured": bool(os.environ.get(name))} for name in REQUIRED_RESTIC_ENV
-			],
-			"offsite_enabled": _env_flag("RESTIC_OFFSITE_BACKUP_ENABLED"),
-			"uptime_kuma_ready": bool(os.environ.get("RESTIC_BACKUP_UPTIME_KUMA_URL")),
-		},
+		"settings": {"enabled": cint(settings.enabled)},
+		"configuration": _configuration(),
 		"items": items[(page - 1) * 10 : page * 10],
 		"page": page,
 		"total": len(items),
@@ -182,36 +163,21 @@ def _site_timestamp(timestamp: float) -> str:
 	)
 
 
-@frappe.whitelist(methods=["POST"])
-def save_settings(values: str | dict[str, Any]) -> dict[str, Any]:
-	"""Save operator-editable backup policy without exposing the internal singleton form."""
+@frappe.whitelist()
+def get_configuration() -> dict[str, Any]:
+	"""Report which deployment variables are set, never their values."""
 	_require_system_manager()
-	payload = frappe.parse_json(values) if isinstance(values, str) else values
-	if not isinstance(payload, dict):
-		frappe.throw(_("Backup settings must be an object."))
-
-	settings = frappe.get_single("Restic Backup Settings")
-	for fieldname in EDITABLE_SETTING_FIELDS:
-		if fieldname in payload:
-			settings.set(fieldname, payload[fieldname])
-	settings.save()
-	return _settings_payload(settings)
+	return _configuration()
 
 
-def _settings_payload(settings) -> dict[str, Any]:
+def _configuration() -> dict[str, Any]:
 	return {
-		"enabled": cint(settings.enabled),
-		"schedule": [
-			{
-				"days": parse_working_days(row.days),
-				"backup_time": str(row.backup_time),
-			}
-			for row in settings.backup_schedule
+		"restic_ready": restic_is_configured(),
+		"required_variables": [
+			{"name": name, "configured": bool(os.environ.get(name))} for name in REQUIRED_RESTIC_ENV
 		],
-		"local_backup_limit": cint(settings.local_backup_limit) or 4,
-		"remote_keep_days": cint(settings.remote_keep_days) or 14,
-		"notification_recipients": settings.notification_recipients or "",
-		"email_on_success": cint(settings.email_on_success),
+		"offsite_enabled": _env_flag("RESTIC_OFFSITE_BACKUP_ENABLED"),
+		"uptime_kuma_ready": bool(os.environ.get("RESTIC_BACKUP_UPTIME_KUMA_URL")),
 	}
 
 

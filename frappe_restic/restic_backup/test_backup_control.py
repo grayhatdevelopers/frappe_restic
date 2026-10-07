@@ -163,6 +163,65 @@ class TestBackupControl(TestCase):
 			self.assertEqual(read_json(receipts / "rolled-back.json")["notification_status"], "Sent")
 			self.assertNotIn("notification_status", read_json(receipts / "completed.json"))
 
+	def _alert(self, *, succeeded: bool, email_on_success: int = 0, desk=None, email=None):
+		managers = [
+			frappe._dict(name="Administrator", email="admin@example.com"),
+			frappe._dict(name="ops@example.com", email="ops@example.com"),
+		]
+		with (
+			patch.object(control, "_settings_int", return_value=email_on_success),
+			patch("frappe.get_all", side_effect=[["Administrator", "ops@example.com"], managers]) as get_all,
+			patch("frappe.logger"),
+			patch.object(control, "enqueue_create_notification", side_effect=desk) as notify,
+			patch("frappe.sendmail", side_effect=email) as sendmail,
+		):
+			status = control._send_alert(
+				"FAILED: backup", "disk full", succeeded=succeeded, run_name="run123"
+			)
+		if get_all.call_count:
+			self.assertEqual(
+				get_all.call_args.kwargs["filters"],
+				{"name": ["in", ["Administrator", "ops@example.com"]], "enabled": 1},
+			)
+		return status, notify, sendmail
+
+	def test_failure_reaches_every_system_manager_in_the_desk_and_by_email(self) -> None:
+		status, notify, sendmail = self._alert(succeeded=False)
+		self.assertEqual(status, "Sent")
+		recipients, notification = notify.call_args.args
+		self.assertEqual(recipients, ["admin@example.com", "ops@example.com"])
+		self.assertEqual(
+			notification,
+			{
+				"type": "Alert",
+				"subject": "FAILED: backup",
+				"email_content": "disk full",
+				"document_type": "Restic Backup Run",
+				"document_name": "run123",
+			},
+		)
+		self.assertEqual(sendmail.call_args.kwargs["recipients"], ["ops@example.com"])
+
+	def test_success_is_emailed_only_on_request_and_never_shown_in_the_desk(self) -> None:
+		status, notify, sendmail = self._alert(succeeded=True)
+		self.assertEqual(status, "Not requested")
+		notify.assert_not_called()
+		sendmail.assert_not_called()
+
+		status, notify, sendmail = self._alert(succeeded=True, email_on_success=1)
+		self.assertEqual(status, "Sent")
+		notify.assert_not_called()
+		self.assertEqual(sendmail.call_args.kwargs["recipients"], ["ops@example.com"])
+
+	def test_one_failing_channel_does_not_block_the_other(self) -> None:
+		status, _notify, sendmail = self._alert(succeeded=False, desk=RuntimeError("queue down"))
+		self.assertEqual(status, "Sent")
+		sendmail.assert_called_once()
+
+		status, notify, _sendmail = self._alert(succeeded=False, email=RuntimeError("no mailbox"))
+		self.assertEqual(status, "Failed")
+		notify.assert_called_once()
+
 	def test_schedule_checkbox_does_not_disable_retention_for_manual_remote_backups(self) -> None:
 		with (
 			patch.dict(os.environ, {"RESTIC_OFFSITE_BACKUP_ENABLED": "1"}),

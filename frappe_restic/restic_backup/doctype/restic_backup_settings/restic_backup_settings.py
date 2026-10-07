@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -18,7 +16,6 @@ WEEKDAYS = (
 	"Saturday",
 	"Sunday",
 )
-EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class ResticBackupSettings(Document):
@@ -50,11 +47,7 @@ class ResticBackupSettings(Document):
 		if not 1 <= cint(self.local_backup_limit) <= 30:
 			frappe.throw(_("Local Backup Sets must be between 1 and 30."))
 		if not 1 <= cint(self.remote_keep_days) <= 3650:
-			frappe.throw(_("Remote Retention must be between 1 and 3650 days."))
-
-		for email in parse_recipients(self.notification_recipients):
-			if not EMAIL_PATTERN.match(email):
-				frappe.throw(_("Invalid notification email address: {0}").format(email))
+			frappe.throw(_("Off-site Retention must be between 1 and 3650 days."))
 
 		frappe.db.set_single_value("System Settings", "backup_limit", cint(self.local_backup_limit))
 
@@ -92,8 +85,3 @@ def parse_backup_schedule(rows) -> list[tuple[list[str], str]]:
 	if not schedule:
 		frappe.throw(_("At least one backup schedule row is required."))
 	return sorted(schedule, key=lambda row: row[1])
-
-
-def parse_recipients(value: str | None) -> list[str]:
-	"""Parse a comma/newline-separated recipient list."""
-	return list(dict.fromkeys(part.strip() for part in re.split(r"[,\n]", value or "") if part.strip()))
