@@ -39,7 +39,7 @@ jobs:
             frappe_image: frappe/erpnext:v15.121.3
             db_image: mariadb:10.6
           - frappe: v16
-            frappe_image: frappe/erpnext:v16.36.0
+            frappe_image: frappe/erpnext:v16.52.1
             db_image: mariadb:11.8
     # Stable name for required checks, independent of the exact image.
     name: ${{ matrix.frappe }}

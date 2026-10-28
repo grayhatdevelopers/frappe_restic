@@ -1,31 +1,43 @@
 {
  "app": "frappe_restic",
- "doctype": "Workspace Sidebar",
+ "doctype": "Sidebar",
  "header_icon": "database",
  "items": [
   {
+   "doctype": "Sidebar Item",
    "icon": "database-backup",
+   "idx": 1,
    "label": "Backup Control",
    "link_to": "restic-backup-control",
    "link_type": "Page",
+   "parentfield": "items",
+   "parenttype": "Sidebar",
    "type": "Link"
   },
   {
+   "doctype": "Sidebar Item",
    "icon": "history",
+   "idx": 2,
    "label": "Backup Runs",
    "link_to": "Restic Backup Run",
    "link_type": "DocType",
+   "parentfield": "items",
+   "parenttype": "Sidebar",
    "type": "Link"
   },
   {
+   "doctype": "Sidebar Item",
    "icon": "settings",
+   "idx": 3,
    "label": "Backup Settings",
    "link_to": "Restic Backup Settings",
    "link_type": "DocType",
+   "parentfield": "items",
+   "parenttype": "Sidebar",
    "type": "Link"
   }
  ],
- "modified": "2026-09-30 12:00:00.000000",
+ "modified": "2026-10-28 12:00:00.000000",
  "module": "Restic Backup",
  "name": "Restic Backup",
  "standard": 1,
