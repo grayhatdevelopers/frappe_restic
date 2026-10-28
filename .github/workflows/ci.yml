@@ -62,7 +62,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.14'
+          python-version: '3.15'
       - run: pip install pre-commit semgrep
       - run: pre-commit run --all-files --show-diff-on-failure
       - name: Frappe's Semgrep rules
