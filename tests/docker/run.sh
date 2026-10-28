@@ -2,7 +2,7 @@
 # Run the app's tests in a disposable Docker bench.
 #
 #   FRAPPE_IMAGE=frappe/erpnext:v15.121.3 tests/docker/run.sh
-#   FRAPPE_IMAGE=frappe/erpnext:v16.36.0 DB_IMAGE=mariadb:11.8 tests/docker/run.sh
+#   FRAPPE_IMAGE=frappe/erpnext:v16.52.1 DB_IMAGE=mariadb:11.8 tests/docker/run.sh
 #
 # KEEP=1 leaves the project running for inspection; remove it with
 #   docker compose -p <project> down -v

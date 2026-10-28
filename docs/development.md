@@ -10,7 +10,7 @@ Unit and Frappe tests in a throwaway bench, removed afterwards:
 
 ```bash
 FRAPPE_IMAGE=frappe/erpnext:v15.121.3 tests/docker/run.sh
-FRAPPE_IMAGE=frappe/erpnext:v16.36.0 DB_IMAGE=mariadb:11.8 tests/docker/run.sh
+FRAPPE_IMAGE=frappe/erpnext:v16.52.1 DB_IMAGE=mariadb:11.8 tests/docker/run.sh
 ```
 
 It covers permissions, schedules, archive validation, deployment and restore, plus
@@ -28,7 +28,7 @@ guard, and a backup from the restored site. See the header of `tests/drill/run.s
 2. Run:
 
    ```bash
-   FRAPPE_IMAGE=frappe/erpnext:v16.36.0 tests/drill/run.sh
+   FRAPPE_IMAGE=frappe/erpnext:v16.52.1 tests/drill/run.sh
    ```
 
 The drill forgets the snapshots it created and removes its containers, volumes and
