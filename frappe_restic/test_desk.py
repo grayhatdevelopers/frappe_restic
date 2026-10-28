@@ -31,7 +31,9 @@ class TestDeskEntries(FrappeTestCase):
 			["restic-backup-control", "Restic Backup Run", "Restic Backup Settings"],
 		)
 		# Icons are imported only on sites using the icon grid, which finds a sidebar by its module.
-		icon = frappe.get_file_json(frappe.get_app_path("frappe_restic", "desktop_icon", "restic_backup.json"))
+		icon = frappe.get_file_json(
+			frappe.get_app_path("frappe_restic", "desktop_icon", "restic_backup.json")
+		)
 		self.assertEqual((icon["link_type"], icon["link_to"]), ("Workspace Sidebar", MODULE))
 
 	def test_patch_removes_the_entries_named_after_the_old_workspace(self):
