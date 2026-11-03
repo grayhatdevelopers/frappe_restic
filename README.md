@@ -56,7 +56,7 @@ server and the background workers):
 | `RESTIC_OFFSITE_BACKUP_ENABLED` | `1` uploads backups off-site; the default `0` keeps them local. |
 | `RESTIC_REPOSITORY` | Repository URL, e.g. `s3:https://s3.<region>.backblazeb2.com/<bucket>/restic/<site>`. |
 | `RESTIC_PASSWORD` | Repository encryption password. Keep a copy outside the server; without it the backups cannot be read. |
-| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Storage credentials, restricted to the bucket. |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Storage credentials, restricted to the bucket. Restoring only reads, so a read-only key is enough for a server that only restores. |
 | `RESTIC_NAMESPACE` | Tag and lock prefix, default `frappe`. Never change it for an existing repository. |
 | `RESTIC_BACKUP_UPTIME_KUMA_URL` | Optional push monitor for scheduled and manual backups. |
 

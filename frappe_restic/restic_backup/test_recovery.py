@@ -66,6 +66,7 @@ class TestRecovery(unittest.TestCase):
 			(self.site / kind / "files" / "newer.txt").write_text("must disappear")
 		self.commit = "a" * 40
 		self.commands = []
+		self.restic_environment = None
 		self.failure = None
 		self.rollback_failure = False
 		self.manifest_commit = self.commit
@@ -96,7 +97,9 @@ class TestRecovery(unittest.TestCase):
 
 	def run_command(self, command: list[str], **kwargs) -> None:
 		self.commands.append(command)
-		if command[0] == "restic":
+		if command[0] == "restic" and self.restic_environment:
+			subprocess.run(command, env={**os.environ, **self.restic_environment}, check=True)
+		elif command[0] == "restic":
 			stage = Path(command[command.index("--target") + 1]) / "snapshot"
 			stage.mkdir()
 			(stage / "database.sql").write_text("SELECT 1;")
@@ -416,7 +419,8 @@ class TestRecovery(unittest.TestCase):
 		self.assertEqual(recovery.deployed_commit(self.site), "unknown")
 
 	@unittest.skipUnless(shutil.which("restic"), "Restic binary required")
-	def test_real_restic_snapshot_manifest_and_verified_restore(self) -> None:
+	@unittest.skipIf(os.geteuid() == 0, "root can write to a read-only repository")
+	def test_real_restic_restore_from_a_read_only_repository(self) -> None:
 		input_root = self.root / "input"
 		input_root.mkdir()
 		self.run_command(["restic", "--target", str(input_root)])
@@ -433,13 +437,26 @@ class TestRecovery(unittest.TestCase):
 			)
 
 		restic("init")
-		result = restic("backup", ".", "--json", cwd=stage)
+		result = restic("backup", ".", "--json", "--tag", "frappe-site:erp.test", cwd=stage)
 		snapshot = json.loads(result.stdout.splitlines()[-1])["snapshot_id"]
 		manifest = json.loads(restic("dump", snapshot, "/recovery.json").stdout)
 		self.assertEqual(manifest["commit"], self.commit)
-		output = self.root / "verified"
-		restic("restore", snapshot, "--target", str(output), "--verify")
-		recovery.validate_snapshot(output, site="erp.test")
+
+		# As with a read-only storage key: nothing in the repository can be written.
+		repository = Path(environment["RESTIC_REPOSITORY"])
+		paths = [repository, *repository.rglob("*")]
+		for path in paths:
+			path.chmod(path.stat().st_mode & ~0o222)
+		self.addCleanup(lambda: [path.chmod(path.stat().st_mode | 0o200) for path in paths])
+		with self.assertRaises(subprocess.CalledProcessError):
+			restic("restore", snapshot, "--target", str(self.root / "locked"))
+
+		self.restic_environment = {key: environment[key] for key in ("RESTIC_REPOSITORY", "RESTIC_PASSWORD")}
+		with patch.dict(os.environ, {**self.restic_environment, "RESTIC_RESTORE_SNAPSHOT": "latest"}):
+			recovery.restore_site(self.root)
+		self.assertEqual(self.receipt()["status"], "Completed")
+		self.assertTrue(self.receipt()["snapshot"].startswith(snapshot))
+		self.assertEqual((self.site / "public" / "files" / "restored.txt").read_text(), "original upload")
 
 
 if __name__ == "__main__":

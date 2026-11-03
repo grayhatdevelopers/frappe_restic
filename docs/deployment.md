@@ -81,6 +81,11 @@ Each request is recorded in a receipt under `sites/.<namespace>-recovery/<site>/
 by the job's hostname. Re-running a completed request does nothing; re-running one that
 failed or was interrupted tries it again.
 
+A restore only reads the repository and takes no Restic lock, so a copy of a live site on
+another server can restore with a read-only storage key. Keep `RESTIC_OFFSITE_BACKUP_ENABLED=0`
+there: the copy's own backups would fail to upload, or with a writable key land among the
+live site's snapshots.
+
 If something fails:
 
 - **`DB_ROOT_PASSWORD` does not open the database server:** refused before anything
