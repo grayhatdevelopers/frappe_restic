@@ -123,7 +123,7 @@ def latest_snapshot(site: str) -> str:
 	tag = f"{namespace()}-site:{site}"
 	try:
 		result = subprocess.run(
-			["restic", "snapshots", "--json", "--tag", tag],
+			["restic", "--no-lock", "snapshots", "--json", "--tag", tag],
 			check=True,
 			capture_output=True,
 			text=True,
@@ -312,7 +312,9 @@ def restore_site(bench_root: Path, *, skip_safety_backup: bool = False) -> None:
 		with tempfile.TemporaryDirectory(prefix="frappe-restore-") as temporary:
 			root = Path(temporary)
 			print("Downloading and verifying selected snapshot...", flush=True)
-			run(["restic", "restore", snapshot, "--target", str(root), "--verify"])
+			# Without a lock a read-only storage key can restore, e.g. a test copy of a live site.
+			# A prune running meanwhile can only make the restore fail, not damage the repository.
+			run(["restic", "--no-lock", "restore", snapshot, "--target", str(root), "--verify"])
 			manifests = list(root.rglob(MANIFEST_FILE))
 			if len(manifests) != 1:
 				raise ValueError(
