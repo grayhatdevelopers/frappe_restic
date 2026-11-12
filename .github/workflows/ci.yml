@@ -36,10 +36,10 @@ jobs:
         # Renovate proposes new images within each major (renovate.json).
         include:
           - frappe: v15
-            frappe_image: frappe/erpnext:v15.124.3
+            frappe_image: frappe/erpnext:v15.125.0
             db_image: mariadb:10.6
           - frappe: v16
-            frappe_image: frappe/erpnext:v16.53.0
+            frappe_image: frappe/erpnext:v16.55.0
             db_image: mariadb:11.8
     # Stable name for required checks, independent of the exact image.
     name: ${{ matrix.frappe }}
